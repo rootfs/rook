@@ -502,7 +502,10 @@ func getNodeNameFromHostname(nodes *v1.NodeList, hostname string) (string, bool)
 }
 
 func (c *Cluster) startMon(m *monConfig, hostname string) error {
-	rs := c.makeReplicaSet(m, hostname)
+	rs := c.makeReplicaSetFromTemplate(m, hostname)
+	if rs == nil {
+		rs = c.makeReplicaSet(m, hostname)
+	}
 	logger.Debugf("Starting mon: %+v", rs.Name)
 	_, err := c.context.Clientset.Extensions().ReplicaSets(c.Namespace).Create(rs)
 	if err != nil {
