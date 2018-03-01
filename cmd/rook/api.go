@@ -62,13 +62,13 @@ func startAPI(cmd *cobra.Command, args []string) error {
 
 	clientset, _, rookClientset, err := getClientset()
 	if err != nil {
-		terminateFatal(fmt.Errorf("failed to init k8s client. %+v\n", err))
+		terminateFatal(fmt.Errorf("failed to init k8s client. %+v", err))
 	}
 
 	// Using the rook-operator image to deploy other rook pods
 	rookImage, err := k8sutil.GetContainerImage(clientset)
 	if err != nil {
-		terminateFatal(fmt.Errorf("failed to get container image. %+v\n", err))
+		terminateFatal(fmt.Errorf("failed to get container image. %+v", err))
 	}
 
 	clusterInfo.Monitors = mon.ParseMonEndpoints(cfg.monEndpoints)

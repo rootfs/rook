@@ -68,13 +68,13 @@ func startOperator(cmd *cobra.Command, args []string) error {
 	// Using the rook-operator image to deploy other rook pods
 	rookImage, err := k8sutil.GetContainerImage(clientset)
 	if err != nil {
-		terminateFatal(fmt.Errorf("failed to get container image. %+v\n", err))
+		terminateFatal(fmt.Errorf("failed to get container image. %+v", err))
 	}
 
 	op := operator.New(context, volumeAttachment, rookImage)
 	err = op.Run()
 	if err != nil {
-		terminateFatal(fmt.Errorf("failed to run operator. %+v\n", err))
+		terminateFatal(fmt.Errorf("failed to run operator. %+v", err))
 	}
 
 	return nil

@@ -58,7 +58,7 @@ func startAgent(cmd *cobra.Command, args []string) error {
 	agent := agent.New(context)
 	err = agent.Run()
 	if err != nil {
-		terminateFatal(fmt.Errorf("failed to run rook agent. %+v\n", err))
+		terminateFatal(fmt.Errorf("failed to run rook agent. %+v", err))
 	}
 
 	return nil

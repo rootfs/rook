@@ -77,7 +77,7 @@ func startOSD(cmd *cobra.Command, args []string) error {
 	var usingDeviceFilter bool
 	if osdDataDeviceFilter != "" {
 		if cfg.devices != "" {
-			return fmt.Errorf("Only one of --data-devices and --data-device-filter can be specified.")
+			return fmt.Errorf("Only one of --data-devices and --data-device-filter can be specified")
 		}
 
 		dataDevices = osdDataDeviceFilter
@@ -92,7 +92,7 @@ func startOSD(cmd *cobra.Command, args []string) error {
 
 	clientset, _, rookClientset, err := getClientset()
 	if err != nil {
-		terminateFatal(fmt.Errorf("failed to init k8s client. %+v\n", err))
+		terminateFatal(fmt.Errorf("failed to init k8s client. %+v", err))
 	}
 
 	context := createContext()
@@ -101,7 +101,7 @@ func startOSD(cmd *cobra.Command, args []string) error {
 
 	locArgs, err := client.FormatLocation(cfg.location, cfg.nodeName)
 	if err != nil {
-		terminateFatal(fmt.Errorf("invalid location. %+v\n", err))
+		terminateFatal(fmt.Errorf("invalid location. %+v", err))
 	}
 	crushLocation := strings.Join(locArgs, " ")
 

@@ -221,7 +221,7 @@ func (h *InstallHelper) CreateK8sRookClusterWithHostPathAndDevices(namespace, st
 
 	if !h.k8shelper.IsServiceUp("rook-api", namespace) {
 		logger.Infof("Rook Cluster couldn't start")
-		return fmt.Errorf("failed to start cluster. api service not found.")
+		return fmt.Errorf("failed to start cluster. api service not found")
 	}
 
 	logger.Infof("Rook Cluster started")
