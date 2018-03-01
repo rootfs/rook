@@ -1,11 +1,4 @@
 inspecode:
-  gofmt:
-    thresholds:
-      num-issues: 0
-    options: [-s]
+  golint:
     auto-fix: true
-  go-test:
-    thresholds:
-      num-issues: 0
   misspell: default
-  golint: default
