@@ -34,9 +34,15 @@ var operatorCmd = &cobra.Command{
 https://github.com/rook/rook`,
 }
 
+var (
+	cephImage string
+)
+
 func init() {
 	operatorCmd.Flags().DurationVar(&mon.HealthCheckInterval, "mon-healthcheck-interval", mon.HealthCheckInterval, "mon health check interval (duration)")
 	operatorCmd.Flags().DurationVar(&mon.MonOutTimeout, "mon-out-timeout", mon.MonOutTimeout, "mon out timeout (duration)")
+	operatorCmd.Flags().StringVar(&cephImage, "ceph-image", "", "if set, run ceph daemons in the provided container image")
+
 	flags.SetFlagsFromEnv(operatorCmd.Flags(), RookEnvVarPrefix)
 
 	operatorCmd.RunE = startOperator
@@ -70,8 +76,10 @@ func startOperator(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		terminateFatal(fmt.Errorf("failed to get container image. %+v\n", err))
 	}
-
-	op := operator.New(context, volumeAttachment, rookImage)
+	if len(cephImage) == 0 {
+		cephImage = rookImage
+	}
+	op := operator.New(context, volumeAttachment, rookImage, cephImage)
 	err = op.Run()
 	if err != nil {
 		terminateFatal(fmt.Errorf("failed to run operator. %+v\n", err))

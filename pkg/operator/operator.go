@@ -55,6 +55,7 @@ type Operator struct {
 	context   *clusterd.Context
 	resources []opkit.CustomResource
 	rookImage string
+	cephImage string
 	// The custom resource that is global to the kubernetes cluster.
 	// The cluster is global because you create multiple clusters in k8s
 	clusterController *cluster.ClusterController
@@ -62,8 +63,8 @@ type Operator struct {
 }
 
 // New creates an operator instance
-func New(context *clusterd.Context, volumeAttachmentWrapper attachment.Attachment, rookImage string) *Operator {
-	clusterController := cluster.NewClusterController(context, rookImage, volumeAttachmentWrapper)
+func New(context *clusterd.Context, volumeAttachmentWrapper attachment.Attachment, rookImage, cephImage string) *Operator {
+	clusterController := cluster.NewClusterController(context, rookImage, cephImage, volumeAttachmentWrapper)
 	volumeProvisioner := provisioner.New(context)
 
 	schemes := []opkit.CustomResource{cluster.ClusterResource, pool.PoolResource, object.ObjectStoreResource,
@@ -74,6 +75,7 @@ func New(context *clusterd.Context, volumeAttachmentWrapper attachment.Attachmen
 		resources:         schemes,
 		volumeProvisioner: volumeProvisioner,
 		rookImage:         rookImage,
+		cephImage:         cephImage,
 	}
 }
 
