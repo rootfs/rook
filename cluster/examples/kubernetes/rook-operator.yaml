@@ -120,6 +120,8 @@ spec:
       containers:
       - name: rook-operator
         image: rook/rook:master
+        # to run ceph in a different container image:
+        # args: ["operator", "--ceph-image=ceph/daemon"]
         args: ["operator"]
         env:
         # To disable RBAC, uncomment the following:
