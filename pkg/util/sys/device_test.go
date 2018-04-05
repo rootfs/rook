@@ -194,3 +194,46 @@ NAME="sda6" SIZE="134217728" TYPE="part" PKNAME="sda"`, nil
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(partitions))
 }
+
+func TestGetParentDevice(t *testing.T) {
+	executor := &exectest.MockExecutor{
+		MockExecuteCommandWithOutput: func(debug bool, actionName string, command string, arg ...string) (string, error) {
+			return `       sda
+sda    sda1
+sda    sda2
+       sdb
+sdb    sdb1
+       sdc
+sdc    sdc1
+       sdd
+sdd    sdd1
+       sde
+sde    sde1
+       sdf
+sdf    sdf1
+       sdg
+sdg    sdg1
+       sdh
+sdh    sdh1
+       sdi
+sdi    sdi1
+`, nil
+		},
+	}
+	parent, err := GetParentDevice("sda", executor)
+	assert.Nil(t, err)
+	assert.Equal(t, "sda", parent)
+
+	parent, err = GetParentDevice("sda1", executor)
+	assert.Nil(t, err)
+	assert.Equal(t, "sda", parent)
+
+	parent, err = GetParentDevice("sdi", executor)
+	assert.Nil(t, err)
+	assert.Equal(t, "sdi", parent)
+
+	parent, err = GetParentDevice("sdi1", executor)
+	assert.Nil(t, err)
+	assert.Equal(t, "sdi", parent)
+
+}

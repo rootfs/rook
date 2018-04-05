@@ -17,11 +17,11 @@ package sys
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
-
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/rook/rook/pkg/util/exec"
@@ -40,6 +40,26 @@ type Partition struct {
 	Name  string
 	Size  uint64
 	Label string
+}
+
+// RawDevice contains information about an unformatted block device
+type RawDevice struct {
+	// DevicePath is the persistent device path on the host
+	DevicePath string `json:"devicePath"`
+	// Size is the device capacity in byte
+	Size uint64 `json:"size"`
+	// Rotational is the boolean whether the device is rotational: true for hdd, false for ssd and nvme
+	Rotational bool `json:"rotational"`
+	// ReadOnly is the boolean whether the device is readonly
+	ReadOnly bool `json:"readOnly"`
+	// Removable is the boolean whether the device is removable
+	Removable bool `json:"removable"`
+	// OwnPartition is whether rook owns the partition
+	OwnPartition bool `json:"ownPartition"`
+	// Filesystem is the filesystem currently on the device
+	Filesystem string `json:"filesystem"`
+	// Extra is a json string encodes the device's information at sysfs
+	Extra string `json:"extra"`
 }
 
 func ListDevices(executor exec.Executor) ([]string, error) {
@@ -256,7 +276,7 @@ func UnmountDevice(devicePath string, executor exec.Executor) error {
 
 func DoesDeviceHaveChildren(device string, executor exec.Executor) (bool, error) {
 	cmd := fmt.Sprintf("check children for device %s", device)
-	output, err := executor.ExecuteCommandWithOutput(false, cmd, "lsblk --all -n -l --output PKNAME")
+	output, err := executor.ExecuteCommandWithOutput(false, cmd, "lsblk", "--all", "-n", "-l", "--output", "PKNAME")
 	if err != nil {
 		return false, fmt.Errorf("command %s failed: %+v", cmd, err)
 	}
@@ -265,6 +285,97 @@ func DoesDeviceHaveChildren(device string, executor exec.Executor) (bool, error)
 	children := Grep(output, searchFor)
 
 	return children != "", nil
+}
+
+func GetParentDevice(device string, executor exec.Executor) (string, error) {
+	cmd := fmt.Sprintf("get parent for device %s", device)
+	output, err := executor.ExecuteCommandWithOutput(false, cmd, "lsblk", "--all", "-n", "-l", "--output", "PKNAME,NAME")
+	if err != nil {
+		return "", fmt.Errorf("command %s failed: %+v", cmd, err)
+	}
+
+	searchFor := fmt.Sprintf("%s$", device)
+	parentline := Grep(output, searchFor)
+	parent := Awk(parentline, 1)
+	if len(parent) == 0 {
+		return device, nil
+	}
+	return parent, nil
+
+}
+
+func CheckIfDeviceAvailable(executor exec.Executor, name string) (bool, string, error) {
+	ownPartitions := true
+	partitions, _, err := GetDevicePartitions(name, executor)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get %s partitions. %+v", name, err)
+	}
+	if !RookOwnsPartitions(partitions) {
+		ownPartitions = false
+	}
+
+	// check if there is a file system on the device
+	devFS, err := GetDeviceFilesystems(name, executor)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to get device %s filesystem: %+v", name, err)
+	}
+
+	return ownPartitions, devFS, nil
+}
+
+func RookOwnsPartitions(partitions []*Partition) bool {
+
+	// if there are partitions, they must all have the rook osd label
+	for _, p := range partitions {
+		if !strings.HasPrefix(p.Label, "ROOK-OSD") {
+			return false
+		}
+	}
+
+	// if there are no partitions, or the partitions are all from rook OSDs, then rook owns the device
+	return true
+}
+
+func ProbeDevice(name string, device *RawDevice) error {
+	if device == nil || len(name) == 0 {
+		return nil
+	}
+	prefix := "/sys/block/" + name
+	rotationalPath := prefix + "/queue/rotational"
+	rotational, err := readBoolFromFile(rotationalPath)
+	if err != nil {
+		return err
+	}
+	roPath := prefix + "/ro"
+	ro, err := readBoolFromFile(roPath)
+	if err != nil {
+		return err
+	}
+	removablePath := prefix + "/removable"
+	removable, err := readBoolFromFile(removablePath)
+	if err != nil {
+		return err
+	}
+	device.Rotational = rotational
+	device.ReadOnly = ro
+	device.Removable = removable
+	return nil
+}
+
+func readBoolFromFile(filepath string) (bool, error) {
+	bytes, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return false, err
+	}
+	if len(bytes) == 0 {
+		return false, fmt.Errorf("empty file %s", filepath)
+	}
+	str := string(bytes[0])
+	if str != "0" && str != "1" {
+		return false, fmt.Errorf("invalid data %s", str)
+	}
+	i := (str == "1")
+	return i, nil
 }
 
 // finds the file system(s) for the device in the output of 'df'
