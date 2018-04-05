@@ -161,7 +161,7 @@ NAME="sda3" SIZE="20" TYPE="part" PKNAME="sda"`
 	// ensure that our mocking makes it look like rook owns the partitions on sda
 	partitions, _, err := sys.GetDevicePartitions("sda", context.Executor)
 	assert.Nil(t, err)
-	assert.True(t, rookOwnsPartitions(partitions))
+	assert.True(t, sys.RookOwnsPartitions(partitions))
 
 	// try to format the device.  even though the device has existing partitions, they are owned by rook, so it is safe
 	// to format and the format/partitioning will happen.
