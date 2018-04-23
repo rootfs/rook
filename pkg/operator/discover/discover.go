@@ -200,6 +200,6 @@ func ListDevices(context *clusterd.Context, namespace, nodeName string) (map[str
 		}
 		devices[node] = d
 	}
-	logger.Debugf("devices %s", devices)
+	logger.Debugf("devices %+v", devices)
 	return devices, nil
 }

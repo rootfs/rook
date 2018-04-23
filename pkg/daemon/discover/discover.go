@@ -20,6 +20,7 @@ package discover
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
@@ -42,13 +43,19 @@ var (
 	RawDeviceCMName = "raw-device-"
 )
 
+type ioutilReader struct{}
+
+func (io ioutilReader) ReadFile(filename string) ([]byte, error) {
+	return ioutil.ReadFile(filename)
+}
+
 func Run(context *clusterd.Context) error {
 	if context == nil {
 		return fmt.Errorf("nil context")
 	}
 	nodeName := os.Getenv(k8sutil.NodeNameEnvVar)
 	namespace := os.Getenv(k8sutil.PodNamespaceEnvVar)
-	devices, err := probeDevices(context)
+	devices, err := probeDevices(context, ioutilReader{})
 	if err != nil {
 		logger.Infof("failed to probe devices: %v", err)
 		return err
@@ -71,6 +78,8 @@ func Run(context *clusterd.Context) error {
 			return err
 		}
 
+		data := make(map[string]string, 1)
+		data[RawDeviceCMData] = deviceStr
 		// the map doesn't exist yet, create it now
 		cm = &v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
@@ -81,13 +90,14 @@ func Run(context *clusterd.Context) error {
 					NodeAttr:        nodeName,
 				},
 			},
-			Data: make(map[string]string),
+			Data: data,
 		}
 		cm, err = context.Clientset.CoreV1().ConfigMaps(namespace).Create(cm)
 		if err != nil {
 			logger.Infof("failed to create configmap: %v", err)
 			return fmt.Errorf("failed to create raw device map %s: %+v", cmName, err)
 		}
+		lastDevice = deviceStr
 	}
 	if deviceStr != lastDevice {
 		data := make(map[string]string, 1)
@@ -111,7 +121,7 @@ func Run(context *clusterd.Context) error {
 	}
 }
 
-func probeDevices(context *clusterd.Context) ([]sys.RawDevice, error) {
+func probeDevices(context *clusterd.Context, reader sys.Reader) ([]sys.RawDevice, error) {
 	devices := make([]sys.RawDevice, 0)
 	rawDevices, err := clusterd.DiscoverDevices(context.Executor)
 	if err != nil {
@@ -130,11 +140,15 @@ func probeDevices(context *clusterd.Context) ([]sys.RawDevice, error) {
 			continue
 		}
 		d := sys.RawDevice{
-			// FIXME: use persistent name
 			DevicePath:   "/dev/" + device.Name,
 			Size:         device.Size,
+			Rotational:   device.Rotational,
+			ReadOnly:     device.Readonly,
+			UUID:         device.UUID,
+			Type:         device.Type,
 			OwnPartition: ownPartition,
 			Filesystem:   devFS,
+			Empty:        device.Empty,
 		}
 
 		parent, err := sys.GetParentDevice(device.Name, context.Executor)
@@ -143,7 +157,7 @@ func probeDevices(context *clusterd.Context) ([]sys.RawDevice, error) {
 			continue
 		}
 
-		err = sys.ProbeDevice(parent, &d)
+		err = sys.ProbeDevice(parent, &d, reader)
 		if err != nil {
 			logger.Infof("failed to probe device %s: %v", device.Name, err)
 			continue

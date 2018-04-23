@@ -108,7 +108,8 @@ func DiscoverDevices(executor exec.Executor) ([]*LocalDisk, error) {
 
 		fs, err := sys.GetDeviceFilesystems(d, executor)
 		if err != nil {
-			return nil, err
+			logger.Warningf("skipping device %s with an unknown filesystem. %+v", d, err)
+			continue
 		}
 
 		disk := &LocalDisk{Name: d, UUID: diskUUID, FileSystem: fs}

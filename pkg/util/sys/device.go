@@ -17,9 +17,9 @@ package sys
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -48,6 +48,10 @@ type RawDevice struct {
 	DevicePath string `json:"devicePath"`
 	// Size is the device capacity in byte
 	Size uint64 `json:"size"`
+	// UUID is GPT GUID
+	UUID string `json:"uuid"`
+	// Type is disk type
+	Type string `json:"type"`
 	// Rotational is the boolean whether the device is rotational: true for hdd, false for ssd and nvme
 	Rotational bool `json:"rotational"`
 	// ReadOnly is the boolean whether the device is readonly
@@ -58,6 +62,8 @@ type RawDevice struct {
 	OwnPartition bool `json:"ownPartition"`
 	// Filesystem is the filesystem currently on the device
 	Filesystem string `json:"filesystem"`
+	// Empty checks whether the device is completely empty
+	Empty bool `json:"empty"`
 	// Extra is a json string encodes the device's information at sysfs
 	Extra string `json:"extra"`
 }
@@ -143,12 +149,12 @@ func GetDevicePropertiesFromPath(devicePath string, executor exec.Executor) (map
 // get the file systems availab
 func GetDeviceFilesystems(device string, executor exec.Executor) (string, error) {
 	cmd := fmt.Sprintf("get filesystem type for %s", device)
-	output, err := executor.ExecuteCommandWithOutput(false, cmd, "df", "--output=source,fstype")
+	output, err := executor.ExecuteCommandWithOutput(false, cmd, "wipefs", "-p", "-n", fmt.Sprintf("/dev/%s", device))
 	if err != nil {
 		return "", fmt.Errorf("command %s failed: %+v", cmd, err)
 	}
 
-	return parseDFOutput(device, output), nil
+	return parseWipefsOutput(output), nil
 }
 
 func RemovePartitions(device string, executor exec.Executor) error {
@@ -215,7 +221,7 @@ func GetDeviceMountPoint(deviceName string, executor exec.Executor) (string, err
 	}
 
 	searchFor := fmt.Sprintf("^/dev/%s on", deviceName)
-	mountPoint := Awk(Grep(output, searchFor), 3)
+	mountPoint := Awk(Grep(output, searchFor), 3, " ")
 	return mountPoint, nil
 }
 
@@ -228,7 +234,7 @@ func GetDeviceFromMountPoint(mountPoint string, executor exec.Executor) (string,
 	}
 
 	searchFor := fmt.Sprintf("on %s ", mountPoint)
-	device := Awk(Grep(output, searchFor), 1)
+	device := Awk(Grep(output, searchFor), 1, " ")
 	return device, nil
 }
 
@@ -296,7 +302,7 @@ func GetParentDevice(device string, executor exec.Executor) (string, error) {
 
 	searchFor := fmt.Sprintf("%s$", device)
 	parentline := Grep(output, searchFor)
-	parent := Awk(parentline, 1)
+	parent := Awk(parentline, 1, " ")
 	if len(parent) == 0 {
 		return device, nil
 	}
@@ -336,34 +342,26 @@ func RookOwnsPartitions(partitions []*Partition) bool {
 	return true
 }
 
-func ProbeDevice(name string, device *RawDevice) error {
+type Reader interface {
+	ReadFile(filename string) ([]byte, error)
+}
+
+func ProbeDevice(name string, device *RawDevice, reader Reader) error {
 	if device == nil || len(name) == 0 {
 		return nil
 	}
 	prefix := "/sys/block/" + name
-	rotationalPath := prefix + "/queue/rotational"
-	rotational, err := readBoolFromFile(rotationalPath)
-	if err != nil {
-		return err
-	}
-	roPath := prefix + "/ro"
-	ro, err := readBoolFromFile(roPath)
-	if err != nil {
-		return err
-	}
 	removablePath := prefix + "/removable"
-	removable, err := readBoolFromFile(removablePath)
+	removable, err := readBoolFromFile(removablePath, reader)
 	if err != nil {
 		return err
 	}
-	device.Rotational = rotational
-	device.ReadOnly = ro
 	device.Removable = removable
 	return nil
 }
 
-func readBoolFromFile(filepath string) (bool, error) {
-	bytes, err := ioutil.ReadFile(filepath)
+func readBoolFromFile(filepath string, reader Reader) (bool, error) {
+	bytes, err := reader.ReadFile(filepath)
 	if err != nil {
 		return false, err
 	}
@@ -376,20 +374,6 @@ func readBoolFromFile(filepath string) (bool, error) {
 	}
 	i := (str == "1")
 	return i, nil
-}
-
-// finds the file system(s) for the device in the output of 'df'
-func parseDFOutput(device, output string) string {
-	var fs []string
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, fmt.Sprintf("/dev/%s", device)) {
-			words := strings.Split(line, " ")
-			fs = append(fs, words[len(words)-1])
-		}
-	}
-
-	return strings.Join(fs, ",")
 }
 
 // finds the disk uuid in the output of sgdisk
@@ -433,4 +417,16 @@ func parseKeyValuePairString(propsRaw string) map[string]string {
 	}
 
 	return propMap
+}
+
+// finds the file system(s) for the device in the output of wipefs
+func parseWipefsOutput(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		matched, err := regexp.MatchString("#", line)
+		if err == nil && matched {
+			continue
+		}
+		return Awk(line, 4, ",")
+	}
+	return ""
 }
