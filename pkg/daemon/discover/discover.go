@@ -149,6 +149,7 @@ func probeDevices(context *clusterd.Context, reader sys.Reader) ([]sys.RawDevice
 			OwnPartition: ownPartition,
 			Filesystem:   devFS,
 			Empty:        device.Empty,
+			Serial:       device.Serial,
 		}
 
 		parent, err := sys.GetParentDevice(device.Name, context.Executor)

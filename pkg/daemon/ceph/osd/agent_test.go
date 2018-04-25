@@ -412,7 +412,7 @@ func TestGetPartitionPerfScheme(t *testing.T) {
 			if command == "blkid" {
 				return "", nil
 			}
-			if command == "wipefs" {
+			if command == "udevadm" {
 				return "", nil
 			}
 			return "", fmt.Errorf("unexpected command %s %v", command, args)
@@ -476,7 +476,7 @@ func TestGetPartitionSchemeDiskInUse(t *testing.T) {
 			if command == "blkid" {
 				return "", nil
 			}
-			if command == "wipefs" {
+			if command == "udevadm" {
 				return "", nil
 			}
 			return "", fmt.Errorf("unexpected command %s %v", command, args)
@@ -540,7 +540,7 @@ func TestGetPartitionSchemeDiskNameChanged(t *testing.T) {
 			if command == "blkid" {
 				return "", nil
 			}
-			if command == "wipefs" {
+			if command == "udevadm" {
 				return "", nil
 			}
 			return "", fmt.Errorf("unexpected command %s %v", command, args)

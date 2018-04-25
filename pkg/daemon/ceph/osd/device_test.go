@@ -136,7 +136,7 @@ NAME="sda3" SIZE="20" TYPE="part" PKNAME="sda"`
 			assert.Equal(t, "blkid /dev/sda3", name)
 			output = "ROOK-OSD0-BLOCK"
 		case 8:
-			assert.Equal(t, command, "wipefs")
+			assert.Equal(t, command, "udevadm")
 			output = ""
 		}
 		outputExecCount++
@@ -238,11 +238,10 @@ func TestPartitionBluestoreMetadataSafe(t *testing.T) {
 	nodeID := "node123"
 	executor := &exectest.MockExecutor{}
 	executor.MockExecuteCommandWithOutput = func(debug bool, name string, command string, args ...string) (string, error) {
-		if command == "wipefs" {
+		if command == "udevadm" {
 			// mock that the metadata device already has a filesytem, this should abort the partition effort
 			if strings.Index(name, "nvme01") != -1 {
-				return `"# offset,uuid,label,type
-				0x438,f2d38cba-37da-411d-b7ba-9a6696c58174,,ext4"`, nil
+				return udevFSOutput, nil
 			}
 		}
 

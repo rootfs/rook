@@ -38,12 +38,28 @@ Total free space is 20971453 sectors (10.0 GiB)
 	assert.Equal(t, "31273b25-7b2e-4d31-bac9-ee77e62eac71", uuid)
 }
 
-func TestParseFileSystem(t *testing.T) {
-	output := `# offset,uuid,label,type
-0x438,f2d38cba-37da-411d-b7ba-9a6696c58174,,ext2
+func TestParseFileSystemAndSerial(t *testing.T) {
+	output := `DEVLINKS=/dev/disk/by-uuid/823fa173-e267-46ff-8539-936173cc1a23 /dev/disk/by-path/pci-0000:03:00.0-scsi-0:0:0:0-part1 /dev/disk/by-id/scsi-2001b4d2000000000-part1
+DEVNAME=/dev/sda1
+DEVPATH=/devices/pci0000:00/0000:00:1c.0/0000:03:00.0/host0/target0:0:0/0:0:0:0/block/sda/sda1
+DEVTYPE=partition
+ID_BUS=scsi
+ID_FS_TYPE=ext4
+ID_FS_USAGE=filesystem
+ID_TYPE=disk
+ID_SCSI_SERIAL=5VP8JAAN
+ID_SERIAL=2001b4d2000000000
+ID_SERIAL_SHORT=001b4d2000000000
+MAJOR=8
+MINOR=1
+SUBSYSTEM=block
+TAGS=:systemd:
+USEC_INITIALIZED=3030424
 `
-	result := parseWipefsOutput(output)
-	assert.Equal(t, "ext2", result)
+	result := parseFS(output)
+	assert.Equal(t, "ext4", result)
+	serial := parseSerial(output)
+	assert.Equal(t, "2001b4d2000000000", serial)
 }
 
 func TestGetDeviceFromMountPoint(t *testing.T) {

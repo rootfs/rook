@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -48,8 +47,10 @@ type RawDevice struct {
 	DevicePath string `json:"devicePath"`
 	// Size is the device capacity in byte
 	Size uint64 `json:"size"`
-	// UUID is GPT GUID
+	// UUID is used by /dev/disk/by-uuid
 	UUID string `json:"uuid"`
+	// Serial is the disk serial used by /dev/disk/by-id
+	Serial string `json:"serial"`
 	// Type is disk type
 	Type string `json:"type"`
 	// Rotational is the boolean whether the device is rotational: true for hdd, false for ssd and nvme
@@ -149,12 +150,12 @@ func GetDevicePropertiesFromPath(devicePath string, executor exec.Executor) (map
 // get the file systems availab
 func GetDeviceFilesystems(device string, executor exec.Executor) (string, error) {
 	cmd := fmt.Sprintf("get filesystem type for %s", device)
-	output, err := executor.ExecuteCommandWithOutput(false, cmd, "wipefs", "-p", "-n", fmt.Sprintf("/dev/%s", device))
+	output, err := executor.ExecuteCommandWithOutput(false, cmd, "udevadm", "info", "--query=property", fmt.Sprintf("/dev/%s", device))
 	if err != nil {
 		return "", fmt.Errorf("command %s failed: %+v", cmd, err)
 	}
 
-	return parseWipefsOutput(output), nil
+	return parseFS(output), nil
 }
 
 func RemovePartitions(device string, executor exec.Executor) error {
@@ -185,6 +186,26 @@ func FormatDevice(devicePath string, executor exec.Executor) error {
 	}
 
 	return nil
+}
+
+func GetDiskSerial(device string, executor exec.Executor) (string, error) {
+	cmd := fmt.Sprintf("get disk %s serial", device)
+	output, err := executor.ExecuteCommandWithOutput(false, cmd,
+		"udevadm", "info", "--query=property", fmt.Sprintf("/dev/%s", device))
+	if err != nil {
+		return "", err
+	}
+	return parseSerial(output), nil
+}
+
+func GetFSUUID(device string, executor exec.Executor) (string, error) {
+	cmd := fmt.Sprintf("get disk %s fs uuid", device)
+	output, err := executor.ExecuteCommandWithOutput(false, cmd,
+		"udevadm", "info", "--query=property", fmt.Sprintf("/dev/%s", device))
+	if err != nil {
+		return "", err
+	}
+	return parseFSUUID(output), nil
 }
 
 // look up the UUID for a disk.
@@ -419,14 +440,26 @@ func parseKeyValuePairString(propsRaw string) map[string]string {
 	return propMap
 }
 
-// finds the file system(s) for the device in the output of wipefs
-func parseWipefsOutput(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		matched, err := regexp.MatchString("#", line)
-		if err == nil && matched {
-			continue
-		}
-		return Awk(line, 4, ",")
+func parseUdevadm(searchFor, output string) string {
+	line := Grep(output, searchFor)
+	if len(line) == 0 {
+		return ""
 	}
-	return ""
+	result := Awk(line, 2, "=")
+	return result
+}
+
+// find disk serial from udevadm info
+func parseSerial(output string) string {
+	return parseUdevadm("^ID_SERIAL=", output)
+}
+
+// find fs from udevadm info
+func parseFS(output string) string {
+	return parseUdevadm("^ID_FS_TYPE=", output)
+}
+
+// find fs uuid from udevadm info
+func parseFSUUID(output string) string {
+	return parseUdevadm("^ID_FS_UUID=", output)
 }
