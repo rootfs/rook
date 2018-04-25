@@ -25,7 +25,6 @@ import (
 	"github.com/rook/rook/pkg/operator/test"
 	"github.com/stretchr/testify/assert"
 
-	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -37,22 +36,6 @@ func TestStartDiscoveryDaemonset(t *testing.T) {
 
 	os.Setenv(k8sutil.PodNameEnvVar, "rook-operator")
 	defer os.Unsetenv(k8sutil.PodNameEnvVar)
-
-	pod := v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "rook-operator",
-			Namespace: "rook-system",
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:  "mypodContainer",
-					Image: "rook/test",
-				},
-			},
-		},
-	}
-	clientset.CoreV1().Pods("rook-system").Create(&pod)
 
 	namespace := "ns"
 	a := New(clientset)
