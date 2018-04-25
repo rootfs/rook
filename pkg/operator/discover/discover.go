@@ -80,8 +80,7 @@ func (d *Discover) Start(namespace, discoverImage string) error {
 }
 
 func (d *Discover) createDiscoverDaemonSet(namespace, discoverImage string) error {
-	// need to be priviledged to run sgdisk
-	privileged := true
+	privileged := false
 	ds := &extensions.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: discoverDaemonsetName,
@@ -110,11 +109,16 @@ func (d *Discover) createDiscoverDaemonSet(namespace, discoverImage string) erro
 								{
 									Name:      "dev",
 									MountPath: "/dev",
-									ReadOnly:  false, // need to be rw to run sgdisk
+									ReadOnly:  true,
 								},
 								{
 									Name:      "sys",
 									MountPath: "/sys",
+									ReadOnly:  true,
+								},
+								{
+									Name:      "udev",
+									MountPath: "/run/udev",
 									ReadOnly:  true,
 								},
 							},
@@ -138,6 +142,14 @@ func (d *Discover) createDiscoverDaemonSet(namespace, discoverImage string) erro
 							VolumeSource: v1.VolumeSource{
 								HostPath: &v1.HostPathVolumeSource{
 									Path: "/sys",
+								},
+							},
+						},
+						{
+							Name: "udev",
+							VolumeSource: v1.VolumeSource{
+								HostPath: &v1.HostPathVolumeSource{
+									Path: "/run/udev",
 								},
 							},
 						},

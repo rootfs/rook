@@ -56,11 +56,11 @@ func TestStartDiscoveryDaemonset(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, namespace, agentDS.Namespace)
 	assert.Equal(t, "rook-discover", agentDS.Name)
-	assert.True(t, *agentDS.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)
+	assert.False(t, *agentDS.Spec.Template.Spec.Containers[0].SecurityContext.Privileged)
 	volumes := agentDS.Spec.Template.Spec.Volumes
-	assert.Equal(t, 2, len(volumes))
+	assert.Equal(t, 3, len(volumes))
 	volumeMounts := agentDS.Spec.Template.Spec.Containers[0].VolumeMounts
-	assert.Equal(t, 2, len(volumeMounts))
+	assert.Equal(t, 3, len(volumeMounts))
 	envs := agentDS.Spec.Template.Spec.Containers[0].Env
 	assert.Equal(t, 2, len(envs))
 	image := agentDS.Spec.Template.Spec.Containers[0].Image
