@@ -159,10 +159,11 @@ NAME="sdb1" SIZE="30" TYPE="part" PKNAME="sdb"`, nil
 				// partition sdb1 has a label MY-PART
 				return "MY-PART", nil
 			}
-		} else if command == "df" {
+		} else if command == "wipefs" {
 			if strings.Index(name, "sdc") != -1 {
 				// /dev/sdc has a file system
-				return "/dev/sdc ext4", nil
+				return `"# offset,uuid,label,type
+0x438,f2d38cba-37da-411d-b7ba-9a6696c58174,,ext4"`, nil
 			}
 			return "", nil
 		}

@@ -39,24 +39,11 @@ Total free space is 20971453 sectors (10.0 GiB)
 }
 
 func TestParseFileSystem(t *testing.T) {
-	output := `Filesystem     Type
-devtmpfs       devtmpfs
-/dev/sda9      ext4
-/dev/sda3      ext4
-/dev/sda1      vfat
-tmpfs          tmpfs
-tmpfs          tmpfs
-/dev/sda6      ext4
-sdc            tmpfs`
-
-	result := parseDFOutput("sda", output)
-	assert.Equal(t, "ext4,ext4,vfat,ext4", result)
-
-	result = parseDFOutput("sdb", output)
-	assert.Equal(t, "", result)
-
-	result = parseDFOutput("sdc", output)
-	assert.Equal(t, "", result)
+	output := `# offset,uuid,label,type
+0x438,f2d38cba-37da-411d-b7ba-9a6696c58174,,ext2
+`
+	result := parseWipefsOutput(output)
+	assert.Equal(t, "ext2", result)
 }
 
 func TestGetDeviceFromMountPoint(t *testing.T) {
