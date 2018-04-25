@@ -43,6 +43,7 @@ type LocalDisk struct {
 	Parent      string `json:"parent"`
 	HasChildren bool   `json:"hasChildren"`
 	Empty       bool   `json:"empty"`
+	Serial      string `json:"serial"`
 }
 
 func GetAvailableDevices(devices []*LocalDisk) []string {
@@ -99,7 +100,7 @@ func DiscoverDevices(executor exec.Executor) ([]*LocalDisk, error) {
 		// get the UUID for disks
 		var diskUUID string
 		if diskType != sys.PartType {
-			diskUUID, err = sys.GetDiskUUID(d, executor)
+			diskUUID, err = sys.GetFSUUID(d, executor)
 			if err != nil {
 				logger.Warningf("skipping device %s with an unknown uuid. %+v", d, err)
 				continue
@@ -112,7 +113,13 @@ func DiscoverDevices(executor exec.Executor) ([]*LocalDisk, error) {
 			continue
 		}
 
-		disk := &LocalDisk{Name: d, UUID: diskUUID, FileSystem: fs}
+		serial, err := sys.GetDiskSerial(d, executor)
+		if err != nil {
+			logger.Warningf("skipping device %s with an unknown serial. %+v", d, err)
+			continue
+		}
+
+		disk := &LocalDisk{Name: d, UUID: diskUUID, FileSystem: fs, Serial: serial}
 
 		if val, ok := diskProps["TYPE"]; ok {
 			disk.Type = val

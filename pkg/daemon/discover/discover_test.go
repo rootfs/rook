@@ -28,6 +28,24 @@ import (
 
 type mockReader struct{}
 
+const udevOutput = `DEVLINKS=/dev/disk/by-uuid/823fa173-e267-46ff-8539-936173cc1a23 /dev/disk/by-path/pci-0000:03:00.0-scsi-0:0:0:0-part1 /dev/disk/by-id/scsi-2001b4d2000000000-part1
+DEVNAME=/dev/sda1
+DEVPATH=/devices/pci0000:00/0000:00:1c.0/0000:03:00.0/host0/target0:0:0/0:0:0:0/block/sda/sda1
+DEVTYPE=partition
+ID_BUS=scsi
+ID_FS_TYPE=ext2
+ID_FS_USAGE=filesystem
+ID_TYPE=disk
+ID_SCSI_SERIAL=5VP8JAAN
+ID_SERIAL=2001b4d2000000000
+ID_SERIAL_SHORT=001b4d2000000000
+MAJOR=8
+MINOR=1
+SUBSYSTEM=block
+TAGS=:systemd:
+USEC_INITIALIZED=3030424
+`
+
 func (m mockReader) ReadFile(filename string) ([]byte, error) {
 	switch filename {
 	case "/sys/block/testa/removable":
@@ -48,9 +66,7 @@ func TestProbeDevices(t *testing.T) {
 		case "lsblk /dev/testa":
 			output = `SIZE="249510756352" ROTA="1" RO="0" TYPE="disk" PKNAME=""`
 		case "get filesystem type for testa":
-			output = `# offset,uuid,label,type
-0x438,f2d38cba-37da-411d-b7ba-9a6696c58174,,ext2
-`
+			output = udevOutput
 		case "get parent for device testa":
 			output = `       testa
 testa    testa1
@@ -59,29 +75,13 @@ testa2   centos_host13-root
 testa2   centos_host13-swap
 testa2   centos_host13-home
 `
-		case "get disk testa uuid":
-			output = `
-***************************************************************
-Found invalid GPT and valid MBR; converting MBR to GPT format.
-***************************************************************
+		case "get disk testa fs uuid":
+			output = udevOutput
 
-
-Warning! Secondary partition table overlaps the last partition by
-33 blocks!
-You will need to delete this partition or resize it in another utility.
-Disk /dev/testa: 487325696 sectors, 232.4 GiB
-Logical sector size: 512 bytes
-Disk identifier (GUID): 2D87651B-5203-41B0-A3CD-3C5984993A57
-Partition table holds up to 128 entries
-First usable sector is 34, last usable sector is 487325662
-Partitions will be aligned on 2048-sector boundaries
-Total free space is 2014 sectors (1007.0 KiB)
-
-Number  Start (sector)    End (sector)  Size       Code  Name
-   1            2048         1026047   500.0 MiB   8300  Linux filesystem
-   2         1026048       487325695   231.9 GiB   8E00  Linux LVM
-`
+		case "get disk testa fs serial":
+			output = udevOutput
 		}
+
 		return output, nil
 	}
 

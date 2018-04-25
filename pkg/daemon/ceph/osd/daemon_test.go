@@ -29,6 +29,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const udevFSOutput = `DEVLINKS=/dev/disk/by-uuid/823fa173-e267-46ff-8539-936173cc1a23 /dev/disk/by-path/pci-0000:03:00.0-scsi-0:0:0:0-part1 /dev/disk/by-id/scsi-2001b4d2000000000-part1
+DEVNAME=/dev/sda1
+DEVPATH=/devices/pci0000:00/0000:00:1c.0/0000:03:00.0/host0/target0:0:0/0:0:0:0/block/sda/sda1
+DEVTYPE=partition
+ID_BUS=scsi
+ID_FS_TYPE=ext4
+ID_FS_USAGE=filesystem
+ID_TYPE=disk
+ID_SCSI_SERIAL=5VP8JAAN
+ID_SERIAL=2001b4d2000000000
+ID_SERIAL_SHORT=001b4d2000000000
+MAJOR=8
+MINOR=1
+SUBSYSTEM=block
+TAGS=:systemd:
+USEC_INITIALIZED=3030424
+`
+
 func TestRunDaemon(t *testing.T) {
 	configDir, _ := ioutil.TempDir("", "")
 	defer os.RemoveAll(configDir)
@@ -159,11 +177,10 @@ NAME="sdb1" SIZE="30" TYPE="part" PKNAME="sdb"`, nil
 				// partition sdb1 has a label MY-PART
 				return "MY-PART", nil
 			}
-		} else if command == "wipefs" {
+		} else if command == "udevadm" {
 			if strings.Index(name, "sdc") != -1 {
 				// /dev/sdc has a file system
-				return `"# offset,uuid,label,type
-0x438,f2d38cba-37da-411d-b7ba-9a6696c58174,,ext4"`, nil
+				return udevFSOutput, nil
 			}
 			return "", nil
 		}
