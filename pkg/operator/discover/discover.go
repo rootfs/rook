@@ -185,26 +185,26 @@ func (d *Discover) createDiscoverDaemonSet(namespace, discoverImage string) erro
 
 }
 
-func ListDevices(context *clusterd.Context, namespace, nodeName string) (map[string][]sys.RawDevice, error) {
-	var devices map[string][]sys.RawDevice
+func ListDevices(context *clusterd.Context, namespace, nodeName string) (map[string][]sys.LocalDisk, error) {
+	var devices map[string][]sys.LocalDisk
 	listOpts := metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", k8sutil.AppAttr, discoverDaemon.AppName)}
 	cms, err := context.Clientset.CoreV1().ConfigMaps(namespace).List(listOpts)
 	if err != nil {
 		return devices, fmt.Errorf("failed to list device configmaps: %+v", err)
 	}
-	devices = make(map[string][]sys.RawDevice, len(cms.Items))
+	devices = make(map[string][]sys.LocalDisk, len(cms.Items))
 	for _, cm := range cms.Items {
 		node := cm.ObjectMeta.Labels[discoverDaemon.NodeAttr]
 		if len(nodeName) > 0 && node != nodeName {
 			continue
 		}
-		deviceJson := cm.Data[discoverDaemon.RawDeviceCMData]
+		deviceJson := cm.Data[discoverDaemon.LocalDiskCMData]
 		logger.Debugf("node %s, device %s", node, deviceJson)
 
 		if len(nodeName) == 0 || len(deviceJson) == 0 {
 			continue
 		}
-		var d []sys.RawDevice
+		var d []sys.LocalDisk
 		err = json.Unmarshal([]byte(deviceJson), &d)
 		if err != nil {
 			logger.Warningf("failed to unmarshal %s", deviceJson)

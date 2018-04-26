@@ -152,7 +152,7 @@ NAME="sda3" SIZE="20" TYPE="part" PKNAME="sda"`
 	config.PopulateCollocatedPerfSchemeEntry(entry, "sda", storeConfig)
 
 	context := &clusterd.Context{Executor: executor, ConfigDir: configDir}
-	context.Devices = []*clusterd.LocalDisk{
+	context.Devices = []*sys.LocalDisk{
 		{Name: "sda", Size: 65},
 	}
 	config := &osdConfig{configRoot: configDir, rootPath: filepath.Join(configDir, "osd1"), id: entry.ID,
@@ -320,7 +320,7 @@ func testPartitionOSDHelper(t *testing.T, storeConfig rookalpha.StoreConfig) {
 
 	// setup a context with 1 disk: sda
 	context := &clusterd.Context{Executor: executor, ConfigDir: configDir}
-	context.Devices = []*clusterd.LocalDisk{
+	context.Devices = []*sys.LocalDisk{
 		{Name: "sda", Size: 100},
 	}
 
