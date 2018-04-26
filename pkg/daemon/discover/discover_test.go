@@ -26,33 +26,38 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type mockReader struct{}
-
-const udevOutput = `DEVLINKS=/dev/disk/by-uuid/823fa173-e267-46ff-8539-936173cc1a23 /dev/disk/by-path/pci-0000:03:00.0-scsi-0:0:0:0-part1 /dev/disk/by-id/scsi-2001b4d2000000000-part1
-DEVNAME=/dev/sda1
-DEVPATH=/devices/pci0000:00/0000:00:1c.0/0000:03:00.0/host0/target0:0:0/0:0:0:0/block/sda/sda1
-DEVTYPE=partition
+const udevOutput = `DEVLINKS=/dev/disk/by-id/scsi-36001405d27e5d898829468b90ce4ef8c /dev/disk/by-id/wwn-0x6001405d27e5d898829468b90ce4ef8c /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-0 /dev/disk/by-uuid/f2d38cba-37da-411d-b7ba-9a6696c58174
+DEVNAME=/dev/sdk
+DEVPATH=/devices/platform/host6/session2/target6:0:0/6:0:0:0/block/sdk
+DEVTYPE=disk
 ID_BUS=scsi
 ID_FS_TYPE=ext2
 ID_FS_USAGE=filesystem
+ID_FS_UUID=f2d38cba-37da-411d-b7ba-9a6696c58174
+ID_FS_UUID_ENC=f2d38cba-37da-411d-b7ba-9a6696c58174
+ID_FS_VERSION=1.0
+ID_MODEL=disk01
+ID_MODEL_ENC=disk01\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20
+ID_PATH=ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-0
+ID_PATH_TAG=ip-127_0_0_1_3260-iscsi-iqn_2016-06_world_srv_storage_target01-lun-0
+ID_REVISION=4.0
+ID_SCSI=1
+ID_SCSI_SERIAL=d27e5d89-8829-468b-90ce-4ef8c02f07fe
+ID_SERIAL=36001405d27e5d898829468b90ce4ef8c
+ID_SERIAL_SHORT=6001405d27e5d898829468b90ce4ef8c
+ID_TARGET_PORT=0
 ID_TYPE=disk
-ID_SCSI_SERIAL=5VP8JAAN
-ID_SERIAL=2001b4d2000000000
-ID_SERIAL_SHORT=001b4d2000000000
+ID_VENDOR=LIO-ORG
+ID_VENDOR_ENC=LIO-ORG\x20
+ID_WWN=0x6001405d27e5d898
+ID_WWN_VENDOR_EXTENSION=0x829468b90ce4ef8c
+ID_WWN_WITH_EXTENSION=0x6001405d27e5d898829468b90ce4ef8c
 MAJOR=8
-MINOR=1
+MINOR=160
 SUBSYSTEM=block
 TAGS=:systemd:
-USEC_INITIALIZED=3030424
+USEC_INITIALIZED=15981915740802
 `
-
-func (m mockReader) ReadFile(filename string) ([]byte, error) {
-	switch filename {
-	case "/sys/block/testa/removable":
-		return []byte{'1'}, nil
-	}
-	return []byte{'0'}, nil
-}
 
 func TestProbeDevices(t *testing.T) {
 	// set up mock execute so we can verify the partitioning happens on sda
@@ -87,10 +92,9 @@ testa2   centos_host13-home
 
 	context := &clusterd.Context{Executor: executor}
 
-	devices, err := probeDevices(context, mockReader{})
+	devices, err := probeDevices(context)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(devices))
-	assert.Equal(t, true, devices[0].Removable)
 	assert.Equal(t, "ext2", devices[0].Filesystem)
 
 }
