@@ -26,6 +26,7 @@ import (
 	"github.com/rook/rook/pkg/clusterd"
 	"github.com/rook/rook/pkg/operator/cluster/ceph/osd/config"
 	exectest "github.com/rook/rook/pkg/util/exec/test"
+	"github.com/rook/rook/pkg/util/sys"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -189,7 +190,7 @@ NAME="sdb1" SIZE="30" TYPE="part" PKNAME="sdb"`, nil
 	}
 
 	context := &clusterd.Context{Executor: executor}
-	context.Devices = []*clusterd.LocalDisk{
+	context.Devices = []*sys.LocalDisk{
 		{Name: "sda"},
 		{Name: "sdb"},
 		{Name: "sdc"},

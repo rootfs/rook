@@ -24,6 +24,45 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const udevOutput = `P: /devices/platform/host6/session2/target6:0:0/6:0:0:0/block/sdk
+N: sdk
+S: disk/by-id/scsi-36001405d27e5d898829468b90ce4ef8c
+S: disk/by-id/wwn-0x6001405d27e5d898829468b90ce4ef8c
+S: disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-0
+S: disk/by-uuid/f2d38cba-37da-411d-b7ba-9a6696c58174
+E: DEVLINKS=/dev/disk/by-id/scsi-36001405d27e5d898829468b90ce4ef8c /dev/disk/by-id/wwn-0x6001405d27e5d898829468b90ce4ef8c /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-0 /dev/disk/by-uuid/f2d38cba-37da-411d-b7ba-9a6696c58174
+E: DEVNAME=/dev/sdk
+E: DEVPATH=/devices/platform/host6/session2/target6:0:0/6:0:0:0/block/sdk
+E: DEVTYPE=disk
+E: ID_BUS=scsi
+E: ID_FS_TYPE=ext2
+E: ID_FS_USAGE=filesystem
+E: ID_FS_UUID=f2d38cba-37da-411d-b7ba-9a6696c58174
+E: ID_FS_UUID_ENC=f2d38cba-37da-411d-b7ba-9a6696c58174
+E: ID_FS_VERSION=1.0
+E: ID_MODEL=disk01
+E: ID_MODEL_ENC=disk01\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20
+E: ID_PATH=ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-0
+E: ID_PATH_TAG=ip-127_0_0_1_3260-iscsi-iqn_2016-06_world_srv_storage_target01-lun-0
+E: ID_REVISION=4.0
+E: ID_SCSI=1
+E: ID_SCSI_SERIAL=d27e5d89-8829-468b-90ce-4ef8c02f07fe
+E: ID_SERIAL=36001405d27e5d898829468b90ce4ef8c
+E: ID_SERIAL_SHORT=6001405d27e5d898829468b90ce4ef8c
+E: ID_TARGET_PORT=0
+E: ID_TYPE=disk
+E: ID_VENDOR=LIO-ORG
+E: ID_VENDOR_ENC=LIO-ORG\x20
+E: ID_WWN=0x6001405d27e5d898
+E: ID_WWN_VENDOR_EXTENSION=0x829468b90ce4ef8c
+E: ID_WWN_WITH_EXTENSION=0x6001405d27e5d898829468b90ce4ef8c
+E: MAJOR=8
+E: MINOR=160
+E: SUBSYSTEM=block
+E: TAGS=:systemd:
+E: USEC_INITIALIZED=15981915740802
+`
+
 func TestFindUUID(t *testing.T) {
 	output := `Disk /dev/sdb: 10485760 sectors, 5.0 GiB
 Logical sector size: 512 bytes
@@ -38,28 +77,11 @@ Total free space is 20971453 sectors (10.0 GiB)
 	assert.Equal(t, "31273b25-7b2e-4d31-bac9-ee77e62eac71", uuid)
 }
 
-func TestParseFileSystemAndSerial(t *testing.T) {
-	output := `DEVLINKS=/dev/disk/by-uuid/823fa173-e267-46ff-8539-936173cc1a23 /dev/disk/by-path/pci-0000:03:00.0-scsi-0:0:0:0-part1 /dev/disk/by-id/scsi-2001b4d2000000000-part1
-DEVNAME=/dev/sda1
-DEVPATH=/devices/pci0000:00/0000:00:1c.0/0000:03:00.0/host0/target0:0:0/0:0:0:0/block/sda/sda1
-DEVTYPE=partition
-ID_BUS=scsi
-ID_FS_TYPE=ext4
-ID_FS_USAGE=filesystem
-ID_TYPE=disk
-ID_SCSI_SERIAL=5VP8JAAN
-ID_SERIAL=2001b4d2000000000
-ID_SERIAL_SHORT=001b4d2000000000
-MAJOR=8
-MINOR=1
-SUBSYSTEM=block
-TAGS=:systemd:
-USEC_INITIALIZED=3030424
-`
+func TestParseFileSystem(t *testing.T) {
+	output := udevOutput
+
 	result := parseFS(output)
-	assert.Equal(t, "ext4", result)
-	serial := parseSerial(output)
-	assert.Equal(t, "2001b4d2000000000", serial)
+	assert.Equal(t, "ext2", result)
 }
 
 func TestGetDeviceFromMountPoint(t *testing.T) {
@@ -198,45 +220,7 @@ NAME="sda6" SIZE="134217728" TYPE="part" PKNAME="sda"`, nil
 	assert.Equal(t, 0, len(partitions))
 }
 
-func TestGetParentDevice(t *testing.T) {
-	executor := &exectest.MockExecutor{
-		MockExecuteCommandWithOutput: func(debug bool, actionName string, command string, arg ...string) (string, error) {
-			return `       sda
-sda    sda1
-sda    sda2
-       sdb
-sdb    sdb1
-       sdc
-sdc    sdc1
-       sdd
-sdd    sdd1
-       sde
-sde    sde1
-       sdf
-sdf    sdf1
-       sdg
-sdg    sdg1
-       sdh
-sdh    sdh1
-       sdi
-sdi    sdi1
-`, nil
-		},
-	}
-	parent, err := GetParentDevice("sda", executor)
-	assert.Nil(t, err)
-	assert.Equal(t, "sda", parent)
-
-	parent, err = GetParentDevice("sda1", executor)
-	assert.Nil(t, err)
-	assert.Equal(t, "sda", parent)
-
-	parent, err = GetParentDevice("sdi", executor)
-	assert.Nil(t, err)
-	assert.Equal(t, "sdi", parent)
-
-	parent, err = GetParentDevice("sdi1", executor)
-	assert.Nil(t, err)
-	assert.Equal(t, "sdi", parent)
-
+func TestParseUdevInfo(t *testing.T) {
+	m := parseUdevInfo(udevOutput)
+	assert.Equal(t, m["ID_FS_TYPE"], "ext2")
 }
