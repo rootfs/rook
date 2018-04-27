@@ -39,7 +39,7 @@ var (
 	AppName         = "rook-discover"
 	NodeAttr        = "rook.io/node"
 	LocalDiskCMData = "devices"
-	LocalDiskCMName = "raw-device-"
+	LocalDiskCMName = "local-device-"
 )
 
 func Run(context *clusterd.Context) error {
@@ -88,7 +88,7 @@ func Run(context *clusterd.Context) error {
 		cm, err = context.Clientset.CoreV1().ConfigMaps(namespace).Create(cm)
 		if err != nil {
 			logger.Infof("failed to create configmap: %v", err)
-			return fmt.Errorf("failed to create raw device map %s: %+v", cmName, err)
+			return fmt.Errorf("failed to create local device map %s: %+v", cmName, err)
 		}
 		lastDevice = deviceStr
 	}
@@ -116,11 +116,11 @@ func Run(context *clusterd.Context) error {
 
 func probeDevices(context *clusterd.Context) ([]sys.LocalDisk, error) {
 	devices := make([]sys.LocalDisk, 0)
-	rawDevices, err := clusterd.DiscoverDevices(context.Executor)
+	localDevices, err := clusterd.DiscoverDevices(context.Executor)
 	if err != nil {
 		return devices, fmt.Errorf("failed initial hardware discovery. %+v", err)
 	}
-	for _, device := range rawDevices {
+	for _, device := range localDevices {
 		if device == nil {
 			continue
 		}
