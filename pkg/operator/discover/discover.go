@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/coreos/pkg/capnslog"
+	rookalpha "github.com/rook/rook/pkg/apis/rook.io/v1alpha1"
 	"github.com/rook/rook/pkg/clusterd"
 	discoverDaemon "github.com/rook/rook/pkg/daemon/discover"
 	"github.com/rook/rook/pkg/operator/k8sutil"
@@ -214,4 +215,34 @@ func ListDevices(context *clusterd.Context, namespace, nodeName string) (map[str
 	}
 	logger.Debugf("devices %+v", devices)
 	return devices, nil
+}
+
+func GetAvailableDevices(context *clusterd.Context, nodeName, clusterName string, devices []rookalpha.Device, filter string, useAllDevices bool) ([]rookalpha.Device, error) {
+	results := []rookalpha.Device{}
+	if len(devices) == 0 && len(filter) == 0 && !useAllDevices {
+		return results, nil
+	}
+	namespace := os.Getenv(k8sutil.PodNamespaceEnvVar)
+	allDevices, err := ListDevices(context, namespace, nodeName)
+	if err != nil {
+		return results, err
+	}
+	nodeDevices, ok := allDevices[nodeName]
+	if !ok {
+		return results, fmt.Errorf("node %s has no devices", nodeName)
+	}
+	if len(devices) > 0 {
+		for i := range devices {
+			for j := range nodeDevices {
+				if devices[i].Name == nodeDevices[j].Name {
+					results = append(results, devices[i])
+				}
+			}
+		}
+	} else if filter != "" {
+
+	} else if useAllDevices {
+	}
+
+	return results, nil
 }
