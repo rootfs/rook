@@ -21,10 +21,15 @@ import (
 	"os"
 	"testing"
 
+	rookalpha "github.com/rook/rook/pkg/apis/rook.io/v1alpha1"
+	"github.com/rook/rook/pkg/clusterd"
+	discoverDaemon "github.com/rook/rook/pkg/daemon/discover"
 	"github.com/rook/rook/pkg/operator/k8sutil"
 	"github.com/rook/rook/pkg/operator/test"
+
 	"github.com/stretchr/testify/assert"
 
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -66,4 +71,54 @@ func TestStartDiscoveryDaemonset(t *testing.T) {
 	image := agentDS.Spec.Template.Spec.Containers[0].Image
 	assert.Equal(t, "rook/rook:myversion", image)
 	assert.Nil(t, agentDS.Spec.Template.Spec.Tolerations)
+}
+
+func TestGetAvailableDevices(t *testing.T) {
+	clientset := test.New(3)
+
+	ns := "rook-system"
+	nodeName := "node123"
+	os.Setenv(k8sutil.PodNamespaceEnvVar, ns)
+	defer os.Unsetenv(k8sutil.PodNamespaceEnvVar)
+
+	os.Setenv(k8sutil.PodNameEnvVar, "rook-operator")
+	defer os.Unsetenv(k8sutil.PodNameEnvVar)
+
+	data := make(map[string]string, 1)
+	data[discoverDaemon.LocalDiskCMData] = `[{"name":"sdd","parent":"","hasChildren":false,"devLinks":"/dev/disk/by-id/scsi-36001405f826bd553d8c4dbf9f41c18be    /dev/disk/by-id/wwn-0x6001405f826bd553d8c4dbf9f41c18be /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-1","size":10737418240,"uuid":"","serial":"36001405f826bd553d8c4dbf9f41c18be","type":"disk","rotational":true,"readOnly":false,"ownPartition":true,"filesystem":"","vendor":"LIO-ORG","model":"disk02","wwn":"0x6001405f826bd553","wwnVendorExtension":"0x6001405f826bd553d8c4dbf9f41c18be","empty":true},{"name":"sdb","parent":"","hasChildren":false,"devLinks":"/dev/disk/by-id/scsi-3600140577f462d9908b409d94114e042   /dev/disk/by-id/wwn-0x600140577f462d9908b409d94114e042 /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-3","size":5368709120,"uuid":"","serial":"3600140577f462d9908b409d94114e042","type":"disk","rotational":true,"readOnly":false,"ownPartition":false,"filesystem":"","vendor":"LIO-ORG","model":"disk04","wwn":"0x600140577f462d99","wwnVendorExtension":"0x600140577f462d9908b409d94114e042","empty":true},{"name":"sdc","parent":"","hasChildren":false,"devLinks":"/dev/disk/by-id/scsi-3600140568c0bd28d4ee43769387c9f02    /dev/disk/by-id/wwn-0x600140568c0bd28d4ee43769387c9f02 /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-2","size":5368709120,"uuid":"","serial":"3600140568c0bd28d4ee43769387c9f02","type":"disk","rotational":true,"readOnly":false,"ownPartition":true,"filesystem":"","vendor":"LIO-ORG","model":"disk03","wwn":"0x600140568c0bd28d","wwnVendorExtension":"0x600140568c0bd28d4ee43769387c9f02","empty":true},{"name":"sda","parent":"","hasChildren":false,"devLinks":"/dev/disk/by-id/scsi-36001405fc00c75fb4c243aa9d61987bd    /dev/disk/by-id/wwn-0x6001405fc00c75fb4c243aa9d61987bd /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-0","size":10737418240,"uuid":"","serial":"36001405fc00c75fb4c243aa9d61987bd","type":"disk","rotational":true,"readOnly":false,"ownPartition":false,"filesystem":"","vendor":"LIO-ORG","model":"disk01","wwn":"0x6001405fc00c75fb","wwnVendorExtension":"0x6001405fc00c75fb4c243aa9d61987bd","empty":true},{"name":"nvme0n1","parent":"","hasChildren":false,"devLinks":"/dev/disk/by-id/nvme-eui.002538c5710091a7","size":512110190592,"uuid":"","serial":"","type":"disk","rotational":false,"readOnly":false,"ownPartition":false,"filesystem":"","vendor":"","model":"","wwn":"","wwnVendorExtension":"","empty":true}]`
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "local-device-" + nodeName,
+			Namespace: ns,
+			Labels: map[string]string{
+				k8sutil.AppAttr:         discoverDaemon.AppName,
+				discoverDaemon.NodeAttr: nodeName,
+			},
+		},
+		Data: data,
+	}
+	_, err := clientset.CoreV1().ConfigMaps(ns).Create(cm)
+	assert.Nil(t, err)
+	context := &clusterd.Context{
+		Clientset: clientset,
+	}
+	d := []rookalpha.Device{
+		rookalpha.Device{
+			Name: "sdc",
+		},
+		rookalpha.Device{
+			Name: "foo",
+		},
+	}
+
+	devices, err := GetAvailableDevices(context, nodeName, ns, d, "^sd.", false)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(devices))
+	devices, err = GetAvailableDevices(context, nodeName, ns, nil, "^sd.", false)
+	assert.Nil(t, err)
+	assert.Equal(t, 4, len(devices))
+	devices, err = GetAvailableDevices(context, nodeName, ns, nil, "", true)
+	assert.Nil(t, err)
+	assert.Equal(t, 5, len(devices))
+
 }
