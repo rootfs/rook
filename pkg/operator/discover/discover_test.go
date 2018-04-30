@@ -103,10 +103,10 @@ func TestGetAvailableDevices(t *testing.T) {
 		Clientset: clientset,
 	}
 	d := []rookalpha.Device{
-		rookalpha.Device{
+		{
 			Name: "sdc",
 		},
-		rookalpha.Device{
+		{
 			Name: "foo",
 		},
 	}
