@@ -169,14 +169,16 @@ func (c *Cluster) Start() error {
 			errorMessages = append(errorMessages, fmt.Sprintf("failed to set orchestration starting status for node %s: %+v", n.Name, err))
 			continue
 		}
+		devicesToUse := n.Devices
 		availDev, deviceErr := discover.GetAvailableDevices(c.context, n.Name, c.Namespace, n.Devices, n.Selection.DeviceFilter, n.Selection.GetUseAllDevices())
 		if deviceErr != nil {
 			logger.Warningf("failed to get devices for node %s cluster %s: %v", n.Name, c.Namespace, deviceErr)
 		} else {
+			devicesToUse = availDev
 			logger.Infof("avail devices for node %s: %+v", n.Name, availDev)
 		}
 		// create the replicaSet that will run the OSDs for this node
-		rs := c.makeReplicaSet(n.Name, n.Devices, n.Selection, resources, n.Config)
+		rs := c.makeReplicaSet(n.Name, devicesToUse, n.Selection, resources, n.Config)
 		_, err := c.context.Clientset.Extensions().ReplicaSets(c.Namespace).Create(rs)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {

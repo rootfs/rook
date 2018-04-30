@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/coreos/pkg/capnslog"
 	rookalpha "github.com/rook/rook/pkg/apis/rook.io/v1alpha1"
@@ -239,9 +240,24 @@ func GetAvailableDevices(context *clusterd.Context, nodeName, clusterName string
 				}
 			}
 		}
-	} else if filter != "" {
-
+	} else if len(filter) >= 0 {
+		for i := range nodeDevices {
+			//TODO support filter based on other keys
+			matched, err := regexp.Match(filter, []byte(nodeDevices[i].Name))
+			if err == nil && matched {
+				d := rookalpha.Device{
+					Name: nodeDevices[i].Name,
+				}
+				results = append(results, d)
+			}
+		}
 	} else if useAllDevices {
+		for i := range nodeDevices {
+			d := rookalpha.Device{
+				Name: nodeDevices[i].Name,
+			}
+			results = append(results, d)
+		}
 	}
 
 	return results, nil
