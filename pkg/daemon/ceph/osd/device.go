@@ -445,7 +445,7 @@ func getStoreSettings(cfg *osdConfig) (map[string]string, error) {
 	return settings, nil
 }
 
-func writeConfigFile(cfg *osdConfig, context *clusterd.Context, cluster *mon.ClusterInfo, location string) error {
+func writeConfigFile(cfg *osdConfig, context *clusterd.Context, cluster *mon.ClusterInfo, location string, prepareOnly bool) error {
 	cephConfig := mon.CreateDefaultCephConfig(context, cluster, cfg.rootPath)
 	if isBluestore(cfg) {
 		cephConfig.GlobalConfig.OsdObjectStore = config.Bluestore
@@ -453,6 +453,11 @@ func writeConfigFile(cfg *osdConfig, context *clusterd.Context, cluster *mon.Clu
 		cephConfig.GlobalConfig.OsdObjectStore = config.Filestore
 	}
 	cephConfig.CrushLocation = location
+	// don't set public or cluster addr if prepare only
+	if prepareOnly {
+		cephConfig.PublicAddr = ""
+		cephConfig.ClusterAddr = ""
+	}
 
 	if cfg.dir || isFilestoreDevice(cfg) {
 		// using the local file system requires some config overrides
@@ -477,9 +482,8 @@ func writeConfigFile(cfg *osdConfig, context *clusterd.Context, cluster *mon.Clu
 	return nil
 }
 
-func initializeOSD(config *osdConfig, context *clusterd.Context, cluster *mon.ClusterInfo, location string) error {
-
-	err := writeConfigFile(config, context, cluster, location)
+func initializeOSD(config *osdConfig, context *clusterd.Context, cluster *mon.ClusterInfo, location string, prepareOnly bool) error {
+	err := writeConfigFile(config, context, cluster, location, prepareOnly)
 	if err != nil {
 		return fmt.Errorf("failed to write config file: %+v", err)
 	}

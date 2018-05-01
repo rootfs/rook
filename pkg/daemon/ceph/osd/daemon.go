@@ -47,7 +47,11 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 	// set the crush location in the osd config file
 	cephConfig := mon.CreateDefaultCephConfig(context, agent.cluster, path.Join(context.ConfigDir, agent.cluster.Name))
 	cephConfig.GlobalConfig.CrushLocation = agent.location
-
+	// don't set public or cluster addr if prepare only
+	if agent.prepareOnly {
+		cephConfig.PublicAddr = ""
+		cephConfig.ClusterAddr = ""
+	}
 	// write the latest config to the config dir
 	if err := mon.GenerateAdminConnectionConfigWithSettings(context, agent.cluster, cephConfig); err != nil {
 		return fmt.Errorf("failed to write connection config. %+v", err)
@@ -97,27 +101,29 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 
 	// start the desired OSDs on devices
 	logger.Infof("configuring osd devices: %+v", devices)
-	if err := agent.configureDevices(context, devices); err != nil {
+	deviceOSDs, err := agent.configureDevices(context, devices)
+	if err != nil {
 		return fmt.Errorf("failed to configure devices. %+v", err)
 	}
 
 	// also start OSDs for the devices that will be removed.  In order to remove devices, we need the
 	// OSDs to first be running so they can participate in the rebalancing
 	logger.Infof("configuring removed osd devices: %+v", removedDevicesMapping)
-	if err := agent.configureDevices(context, removedDevicesMapping); err != nil {
+	if _, err := agent.configureDevices(context, removedDevicesMapping); err != nil {
 		// some devices that will be removed may be legitimately dead, let's try to remove them even if they can't start up
 		logger.Warningf("failed to configure removed devices, but proceeding with removal attempts. %+v", err)
 	}
 
 	// start up the OSDs for directories
 	logger.Infof("configuring osd dirs: %+v", dirs)
-	if err := agent.configureDirs(context, dirs); err != nil {
+	dirOSDs, err := agent.configureDirs(context, dirs)
+	if err != nil {
 		return fmt.Errorf("failed to configure dirs %v. %+v", dirs, err)
 	}
 
 	// start up the OSDs for directories that will be removed.
 	logger.Infof("configuring removed osd dirs: %+v", removedDirs)
-	if err := agent.configureDirs(context, removedDirs); err != nil {
+	if _, err := agent.configureDirs(context, removedDirs); err != nil {
 		// some dirs that will be removed may be legitimately dead, let's try to remove them even if they can't start up
 		logger.Warningf("failed to configure removed dirs, but proceeding with removal attempts. %+v", err)
 	}
@@ -143,9 +149,10 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 			logger.Warningf("failed to clean up node resources, they may need to be cleaned up manually: %+v", err)
 		}
 	}
-
+	logger.Infof("device osds:%v\ndir osds: %v", deviceOSDs, dirOSDs)
+	osds := append(deviceOSDs, dirOSDs...)
 	// orchestration is completed, update the status
-	status = oposd.OrchestrationStatus{Status: oposd.OrchestrationStatusCompleted}
+	status = oposd.OrchestrationStatus{OSDs: osds, Status: oposd.OrchestrationStatusCompleted}
 	if err := oposd.UpdateOrchestrationStatusMap(context.Clientset, agent.cluster.Name, agent.nodeName, status); err != nil {
 		return err
 	}

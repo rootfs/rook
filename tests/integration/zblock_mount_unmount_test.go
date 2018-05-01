@@ -88,7 +88,7 @@ func (s *BlockMountUnMountSuite) SetupSuite() {
 	poolNameRWO := "block-pool-rwo"
 	storageClassNameRWO := "rook-block-rwo"
 	s.pvcNameRWX = "block-persistent-rwx"
-	s.op, s.kh = NewBaseTestOperations(s.T, s.namespace, "bluestore", "", false, false, 1)
+	s.op, s.kh = NewBaseTestOperations(s.T, s.namespace, "bluestore", installer.DefaultDataDirHostPath(), false, false, 1)
 	s.testClient = GetTestClient(s.kh, s.namespace, s.op, s.T)
 	s.bc = s.testClient.BlockClient
 

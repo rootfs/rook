@@ -105,11 +105,11 @@ case "${1:-}" in
       init_flexvolume
     else
       echo "starting minikube with kubeadm bootstrapper"
-      minikube start --memory=${MEMORY} -b kubeadm --kubernetes-version ${KUBE_VERSION}
+      minikube start --disk-size 100g --memory=${MEMORY} -b kubeadm --kubernetes-version ${KUBE_VERSION} --vm-driver=kvm2
       wait_for_ssh
     fi
     # create a link so the default dataDirHostPath will work for this environment
-    minikube ssh "sudo mkdir /mnt/sda1/var/lib/rook;sudo ln -s /mnt/sda1/var/lib/rook /var/lib/rook"
+    minikube ssh "sudo mkdir /mnt/vda1/var/lib/rook;sudo ln -s /mnt/vda1/var/lib/rook /var/lib/rook"
     copy_image_to_cluster ${BUILD_REGISTRY}/rook-amd64 rook/rook:master
     copy_image_to_cluster ${BUILD_REGISTRY}/toolbox-amd64 rook/toolbox:master
     ;;

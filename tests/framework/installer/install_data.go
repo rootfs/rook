@@ -215,6 +215,17 @@ rules:
   - watch
   - delete
 - apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - delete
+- apiGroups:
   - rook.io
   resources:
   - "*"

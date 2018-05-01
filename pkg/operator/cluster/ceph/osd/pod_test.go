@@ -35,7 +35,7 @@ import (
 func TestPodContainer(t *testing.T) {
 	cluster := &Cluster{Namespace: "myosd", Version: "23"}
 	config := rookalpha.Config{}
-	c := cluster.podTemplateSpec([]rookalpha.Device{}, rookalpha.Selection{}, v1.ResourceRequirements{}, config)
+	c := cluster.podTemplateSpec([]rookalpha.Device{}, rookalpha.Selection{}, v1.ResourceRequirements{}, config, false /* prepareOnly */, v1.RestartPolicyAlways)
 	assert.NotNil(t, c)
 	assert.Equal(t, 1, len(c.Spec.Containers))
 	container := c.Spec.Containers[0]
@@ -49,43 +49,48 @@ func TestDaemonset(t *testing.T) {
 	testPodDevices(t, "", "", false)
 }
 
-func testPodDevices(t *testing.T, dataDir, deviceFilter string, allDevices bool) {
+func testPodDevices(t *testing.T, dataDir, deviceName string, allDevices bool) {
 	storageSpec := rookalpha.StorageSpec{
-		Selection: rookalpha.Selection{UseAllDevices: &allDevices, DeviceFilter: deviceFilter},
+		Selection: rookalpha.Selection{UseAllDevices: &allDevices, DeviceFilter: deviceName},
 		Nodes:     []rookalpha.Node{{Name: "node1"}},
+	}
+	devices := []rookalpha.Device{
+		{Name: deviceName},
 	}
 
 	clientset := fake.NewSimpleClientset()
 	c := New(&clusterd.Context{Clientset: clientset, ConfigDir: "/var/lib/rook", Executor: &exectest.MockExecutor{}}, "ns", "rook/rook:myversion",
 		storageSpec, dataDir, rookalpha.Placement{}, false, v1.ResourceRequirements{}, metav1.OwnerReference{})
 
-	devMountNeeded := deviceFilter != "" || allDevices
+	devMountNeeded := deviceName != "" || allDevices
 
 	n := c.Storage.ResolveNode(storageSpec.Nodes[0].Name)
-	replicaSet := c.makeReplicaSet(n.Name, n.Devices, n.Selection, v1.ResourceRequirements{}, n.Config)
+	if len(devices) == 0 && len(dataDir) == 0 {
+		return
+	}
+	osd := OSDInfo{
+		ID: 0,
+	}
+
+	replicaSet := c.makeOSDReplicaSet(n.Name, devices, n.Selection, v1.ResourceRequirements{}, osd)
 	assert.NotNil(t, replicaSet)
-	assert.Equal(t, "rook-ceph-osd-node1", replicaSet.Name)
+	assert.Equal(t, "rook-ceph-osd-node-node1-id-0", replicaSet.Name)
 	assert.Equal(t, c.Namespace, replicaSet.Namespace)
 	assert.Equal(t, int32(1), *(replicaSet.Spec.Replicas))
 	assert.Equal(t, "node1", replicaSet.Spec.Template.Spec.NodeSelector[apis.LabelHostname])
 	assert.Equal(t, v1.RestartPolicyAlways, replicaSet.Spec.Template.Spec.RestartPolicy)
-	if devMountNeeded {
+	if devMountNeeded && len(dataDir) > 0 {
 		assert.Equal(t, 3, len(replicaSet.Spec.Template.Spec.Volumes))
-	} else {
+	}
+	if devMountNeeded && len(dataDir) == 0 {
 		assert.Equal(t, 2, len(replicaSet.Spec.Template.Spec.Volumes))
 	}
-	assert.Equal(t, "rook-data", replicaSet.Spec.Template.Spec.Volumes[0].Name)
-	assert.Equal(t, "rook-config-override", replicaSet.Spec.Template.Spec.Volumes[1].Name)
-	if devMountNeeded {
-		assert.Equal(t, "devices", replicaSet.Spec.Template.Spec.Volumes[2].Name)
+	if !devMountNeeded && len(dataDir) > 0 {
+		assert.Equal(t, 2, len(replicaSet.Spec.Template.Spec.Volumes))
 	}
-	if dataDir == "" {
-		assert.NotNil(t, replicaSet.Spec.Template.Spec.Volumes[0].EmptyDir)
-		assert.Nil(t, replicaSet.Spec.Template.Spec.Volumes[0].HostPath)
-	} else {
-		assert.Nil(t, replicaSet.Spec.Template.Spec.Volumes[0].EmptyDir)
-		assert.Equal(t, dataDir, replicaSet.Spec.Template.Spec.Volumes[0].HostPath.Path)
-	}
+
+	//assert.Equal(t, "rook-data", replicaSet.Spec.Template.Spec.Volumes[0].Name)
+	assert.Equal(t, "rook-config-override", replicaSet.Spec.Template.Spec.Volumes[0].Name)
 
 	assert.Equal(t, appName, replicaSet.Spec.Template.ObjectMeta.Name)
 	assert.Equal(t, appName, replicaSet.Spec.Template.ObjectMeta.Labels["app"])
@@ -97,24 +102,9 @@ func testPodDevices(t *testing.T, dataDir, deviceFilter string, allDevices bool)
 	if devMountNeeded {
 		assert.Equal(t, 3, len(cont.VolumeMounts))
 	} else {
-		assert.Equal(t, 2, len(cont.VolumeMounts))
+		assert.Equal(t, 3, len(cont.VolumeMounts))
 	}
-	assert.Equal(t, "osd", cont.Args[0])
-
-	// verify the config dir env var
-	verifyEnvVar(t, cont.Env, "ROOK_CONFIG_DIR", "/var/lib/rook", true)
-
-	// verify the osd store type env var uses the default
-	verifyEnvVar(t, cont.Env, "ROOK_OSD_STORE", "bluestore", true)
-
-	// verify the device filter env var
-	if deviceFilter != "" {
-		verifyEnvVar(t, cont.Env, "ROOK_DATA_DEVICE_FILTER", deviceFilter, true)
-	} else if allDevices {
-		verifyEnvVar(t, cont.Env, "ROOK_DATA_DEVICE_FILTER", "all", true)
-	} else {
-		verifyEnvVar(t, cont.Env, "ROOK_DATA_DEVICE_FILTER", "", false)
-	}
+	assert.Equal(t, "sh", cont.Command[0])
 }
 
 func verifyEnvVar(t *testing.T, envVars []v1.EnvVar, expectedName, expectedValue string, expectedFound bool) {
@@ -152,23 +142,15 @@ func TestStorageSpecDevicesAndDirectories(t *testing.T) {
 		storageSpec, "", rookalpha.Placement{}, false, v1.ResourceRequirements{}, metav1.OwnerReference{})
 
 	n := c.Storage.ResolveNode(storageSpec.Nodes[0].Name)
-	replicaSet := c.makeReplicaSet(n.Name, n.Devices, n.Selection, v1.ResourceRequirements{}, n.Config)
+	osd := OSDInfo{
+		ID: 0,
+	}
+	replicaSet := c.makeOSDReplicaSet(n.Name, n.Devices, n.Selection, v1.ResourceRequirements{}, osd)
 	assert.NotNil(t, replicaSet)
 
 	// pod spec should have a volume for the given dir
 	podSpec := replicaSet.Spec.Template.Spec
-	assert.Equal(t, 4, len(podSpec.Volumes))
-	assert.Equal(t, "rook-dir1", podSpec.Volumes[3].Name)
-	assert.Equal(t, "/rook/dir1", podSpec.Volumes[3].VolumeSource.HostPath.Path)
-
-	// container should have a volume mount for the given dir
-	container := podSpec.Containers[0]
-	assert.Equal(t, "rook-dir1", container.VolumeMounts[3].Name)
-	assert.Equal(t, "/rook/dir1", container.VolumeMounts[3].MountPath)
-
-	// container command should have the given dir and device
-	verifyEnvVar(t, container.Env, "ROOK_DATA_DIRECTORIES", "/rook/dir1", true)
-	verifyEnvVar(t, container.Env, "ROOK_DATA_DEVICES", "sda", true)
+	assert.Equal(t, 2, len(podSpec.Volumes))
 }
 
 func TestStorageSpecConfig(t *testing.T) {

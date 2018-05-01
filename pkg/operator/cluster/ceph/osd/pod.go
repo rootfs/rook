@@ -25,8 +25,11 @@ import (
 	rookalpha "github.com/rook/rook/pkg/apis/rook.io/v1alpha1"
 	opmon "github.com/rook/rook/pkg/operator/cluster/ceph/mon"
 	"github.com/rook/rook/pkg/operator/k8sutil"
+
+	batch "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/kubelet/apis"
 )
@@ -41,7 +44,7 @@ const (
 )
 
 func (c *Cluster) makeDaemonSet(selection rookalpha.Selection, config rookalpha.Config) *extensions.DaemonSet {
-	podSpec := c.podTemplateSpec(nil, selection, c.resources, config)
+	podSpec := c.podTemplateSpec(nil, selection, c.resources, config, false /* prepareOnly */, v1.RestartPolicyAlways)
 	return &extensions.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            appName,
@@ -61,10 +64,132 @@ func (c *Cluster) makeDaemonSet(selection rookalpha.Selection, config rookalpha.
 	}
 }
 
+func (c *Cluster) makeJob(nodeName string, devices []rookalpha.Device,
+	selection rookalpha.Selection, resources v1.ResourceRequirements, config rookalpha.Config) *batch.Job {
+
+	podSpec := c.podTemplateSpec(devices, selection, resources, config, true /* prepare-only */, v1.RestartPolicyOnFailure)
+	podSpec.Spec.NodeSelector = map[string]string{apis.LabelHostname: nodeName}
+
+	return &batch.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            fmt.Sprintf(prepareAppNameFmt, nodeName),
+			Namespace:       c.Namespace,
+			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
+			Labels: map[string]string{
+				k8sutil.AppAttr:     appName,
+				k8sutil.ClusterAttr: c.Namespace,
+			},
+		},
+		Spec: batch.JobSpec{
+			Template: podSpec,
+		},
+	}
+}
+
+func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device, selection rookalpha.Selection, resources v1.ResourceRequirements, osd OSDInfo) *extensions.ReplicaSet {
+	replicaCount := int32(1)
+	volumeMounts := []v1.VolumeMount{
+		{Name: k8sutil.DataDirVolume, MountPath: k8sutil.DataDir},
+		k8sutil.ConfigOverrideMount(),
+	}
+	volumes := []v1.Volume{k8sutil.ConfigOverrideVolume()}
+	if c.dataDirHostPath != "" {
+		// the user has specified a host path to use for the data dir, use that instead
+		dataDirSource := v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.dataDirHostPath}}
+		volumes = append(volumes, v1.Volume{Name: k8sutil.DataDirVolume, VolumeSource: dataDirSource})
+	}
+
+	// by default, don't define any volume config unless it is required
+	if len(devices) > 0 || selection.MetadataDevice != "" {
+		// create volume config for the data dir and /dev so the pod can access devices on the host
+		devVolume := v1.Volume{Name: "devices", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dev"}}}
+		volumes = append(volumes, devVolume)
+		devMount := v1.VolumeMount{Name: "devices", MountPath: "/dev"}
+		volumeMounts = append(volumeMounts, devMount)
+	}
+
+	if len(volumes) == 0 {
+		logger.Warningf("empty volumes")
+		return nil
+	}
+
+	envVars := []v1.EnvVar{
+		nodeNameEnvVar(),
+		k8sutil.PodIPEnvVar(k8sutil.PrivateIPEnvVar),
+		k8sutil.PodIPEnvVar(k8sutil.PublicIPEnvVar),
+	}
+
+	privileged := true
+	runAsUser := int64(0)
+	readOnlyRootFilesystem := false
+	DNSPolicy := v1.DNSClusterFirst
+	if c.HostNetwork {
+		DNSPolicy = v1.DNSClusterFirstWithHostNet
+	}
+
+	return &extensions.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            fmt.Sprintf(osdAppNameFmt, nodeName, osd.ID),
+			Namespace:       c.Namespace,
+			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
+			Labels: map[string]string{
+				k8sutil.AppAttr:     appName,
+				k8sutil.ClusterAttr: c.Namespace,
+			},
+		},
+		Spec: extensions.ReplicaSetSpec{
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: appName,
+					Labels: map[string]string{
+						k8sutil.AppAttr:     appName,
+						k8sutil.ClusterAttr: c.Namespace,
+					},
+					Annotations: map[string]string{},
+				},
+				Spec: v1.PodSpec{
+					NodeSelector: map[string]string{apis.LabelHostname: nodeName},
+					//FIXME: use a diff SA for osd daemon
+					ServiceAccountName: appName,
+					RestartPolicy:      v1.RestartPolicyAlways,
+					HostNetwork:        c.HostNetwork,
+					DNSPolicy:          DNSPolicy,
+					Containers: []v1.Container{
+						{
+							Command: []string{"sh", "-c",
+								fmt.Sprintf("ceph-osd --foreground --id %d --conf %s --osd-data %s --keyring %s --cluster %s --osd-uuid %s %s %s",
+									osd.ID,
+									osd.Config,
+									osd.DataPath,
+									osd.KeyringPath,
+									osd.Cluster,
+									osd.UUID,
+									fmt.Sprintf("--public-addr=${%s}", k8sutil.PublicIPEnvVar),
+									fmt.Sprintf("--cluster-addr=${%s}", k8sutil.PrivateIPEnvVar)),
+							},
+							Name:         appName,
+							Image:        k8sutil.MakeRookImage(c.Version),
+							VolumeMounts: volumeMounts,
+							Env:          envVars,
+							Resources:    resources,
+							SecurityContext: &v1.SecurityContext{
+								Privileged:             &privileged,
+								RunAsUser:              &runAsUser,
+								ReadOnlyRootFilesystem: &readOnlyRootFilesystem,
+							},
+						},
+					},
+					Volumes: volumes,
+				},
+			},
+			Replicas: &replicaCount,
+		},
+	}
+}
 func (c *Cluster) makeReplicaSet(nodeName string, devices []rookalpha.Device,
 	selection rookalpha.Selection, resources v1.ResourceRequirements, config rookalpha.Config) *extensions.ReplicaSet {
 
-	podSpec := c.podTemplateSpec(devices, selection, resources, config)
+	podSpec := c.podTemplateSpec(devices, selection, resources, config, false /* prepareOnly */, v1.RestartPolicyAlways)
 	podSpec.Spec.NodeSelector = map[string]string{apis.LabelHostname: nodeName}
 	replicaCount := int32(1)
 
@@ -86,17 +211,13 @@ func (c *Cluster) makeReplicaSet(nodeName string, devices []rookalpha.Device,
 }
 
 func (c *Cluster) podTemplateSpec(devices []rookalpha.Device, selection rookalpha.Selection,
-	resources v1.ResourceRequirements, config rookalpha.Config) v1.PodTemplateSpec {
-	// by default, the data/config dir will be an empty volume
-	dataDirSource := v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}
+	resources v1.ResourceRequirements, config rookalpha.Config, prepareOnly bool, restart v1.RestartPolicy) v1.PodTemplateSpec {
+
+	volumes := []v1.Volume{k8sutil.ConfigOverrideVolume()}
 	if c.dataDirHostPath != "" {
 		// the user has specified a host path to use for the data dir, use that instead
-		dataDirSource = v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.dataDirHostPath}}
-	}
-
-	volumes := []v1.Volume{
-		{Name: k8sutil.DataDirVolume, VolumeSource: dataDirSource},
-		k8sutil.ConfigOverrideVolume(),
+		dataDirSource := v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: c.dataDirHostPath}}
+		volumes = append(volumes, v1.Volume{Name: k8sutil.DataDirVolume, VolumeSource: dataDirSource})
 	}
 
 	// by default, don't define any volume config unless it is required
@@ -117,8 +238,8 @@ func (c *Cluster) podTemplateSpec(devices []rookalpha.Device, selection rookalph
 
 	podSpec := v1.PodSpec{
 		ServiceAccountName: appName,
-		Containers:         []v1.Container{c.osdContainer(devices, selection, resources, config)},
-		RestartPolicy:      v1.RestartPolicyAlways,
+		Containers:         []v1.Container{c.osdContainer(devices, selection, resources, config, prepareOnly)},
+		RestartPolicy:      restart,
 		Volumes:            volumes,
 		HostNetwork:        c.HostNetwork,
 	}
@@ -141,7 +262,7 @@ func (c *Cluster) podTemplateSpec(devices []rookalpha.Device, selection rookalph
 }
 
 func (c *Cluster) osdContainer(devices []rookalpha.Device, selection rookalpha.Selection,
-	resources v1.ResourceRequirements, config rookalpha.Config) v1.Container {
+	resources v1.ResourceRequirements, config rookalpha.Config, prepareOnly bool) v1.Container {
 
 	envVars := []v1.EnvVar{
 		nodeNameEnvVar(),
@@ -154,6 +275,7 @@ func (c *Cluster) osdContainer(devices []rookalpha.Device, selection rookalpha.S
 		opmon.AdminSecretEnvVar(),
 		k8sutil.ConfigDirEnvVar(),
 		k8sutil.ConfigOverrideEnvVar(),
+		{Name: "PREPARE_ONLY", Value: strconv.FormatBool(prepareOnly)},
 	}
 
 	devMountNeeded := false

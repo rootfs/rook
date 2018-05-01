@@ -18,6 +18,9 @@ package installer
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -164,7 +167,14 @@ func (h *InstallHelper) CreateK8sRookToolbox(namespace string) (err error) {
 }
 
 func (h *InstallHelper) CreateK8sRookCluster(namespace string, storeType string) (err error) {
-	return h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, "", false, 1, true /* startWithAllNodes */)
+	if err := os.MkdirAll(DefaultDataDirHostPath(), 0755); err != nil {
+		return err
+	}
+	dataDir, err := ioutil.TempDir(DefaultDataDirHostPath(), "test-")
+	if err != nil {
+		return err
+	}
+	return h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, dataDir, false, 1, true /* startWithAllNodes */)
 }
 
 //CreateK8sRookCluster creates rook cluster via kubectl
@@ -485,4 +495,10 @@ func IsAdditionalDeviceAvailableOnCluster() bool {
 	}
 	logger.Info("No additional disks found on cluster")
 	return false
+}
+
+func DefaultDataDirHostPath() string {
+	cwd, _ := os.Getwd()
+	testDir := path.Join(cwd, "rook-test")
+	return testDir
 }

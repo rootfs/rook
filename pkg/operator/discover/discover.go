@@ -42,6 +42,8 @@ const (
 	discoverDaemonsetName             = "rook-discover"
 	discoverDaemonsetTolerationEnv    = "DISCOVER_TOLERATION"
 	discoverDaemonsetTolerationKeyEnv = "DISCOVER_TOLERATION_KEY"
+	deviceInUseCMName                 = "local-device-in-use-"
+	deviceInUseAppName                = "rook-claimed-devices"
 )
 
 var logger = capnslog.NewPackageLogger("github.com/rook/rook", "op-discover")
@@ -218,25 +220,158 @@ func ListDevices(context *clusterd.Context, namespace, nodeName string) (map[str
 	return devices, nil
 }
 
+func ListDevicesInUse(context *clusterd.Context, namespace, nodeName string) ([]sys.LocalDisk, *v1.ConfigMap, error) {
+	var devices []sys.LocalDisk
+
+	if len(nodeName) == 0 {
+		return devices, nil, fmt.Errorf("empty node name")
+	}
+
+	listOpts := metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", k8sutil.AppAttr, deviceInUseAppName)}
+	cms, err := context.Clientset.CoreV1().ConfigMaps(namespace).List(listOpts)
+	if err != nil {
+		return devices, nil, fmt.Errorf("failed to list device in use configmaps: %+v", err)
+	}
+
+	for _, cm := range cms.Items {
+		node := cm.ObjectMeta.Labels[discoverDaemon.NodeAttr]
+		if node != nodeName {
+			continue
+		}
+		deviceJson := cm.Data[discoverDaemon.LocalDiskCMData]
+		logger.Debugf("node %s, device in use %s", node, deviceJson)
+
+		if len(node) == 0 || len(deviceJson) == 0 {
+			continue
+		}
+
+		err = json.Unmarshal([]byte(deviceJson), &devices)
+		if err != nil {
+			logger.Warningf("failed to unmarshal %s", deviceJson)
+			continue
+		}
+		logger.Debugf("devices in use %+v", devices)
+		return devices, &cm, nil
+	}
+	// when reaching here, the device-in-use cm doesn't exist, create one
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deviceInUseCMName + nodeName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				k8sutil.AppAttr:         deviceInUseAppName,
+				discoverDaemon.NodeAttr: nodeName,
+			},
+		},
+		Data: make(map[string]string, 1),
+	}
+	cm, err = context.Clientset.CoreV1().ConfigMaps(namespace).Create(cm)
+	return devices, cm, err
+}
+
+func FreeDevices(context *clusterd.Context, namespace, nodeName string, devicesToFree []rookalpha.Device) error {
+	if len(nodeName) == 0 || len(devicesToFree) == 0 {
+		return nil
+	}
+
+	listOpts := metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=%s", k8sutil.AppAttr, deviceInUseAppName)}
+	cms, err := context.Clientset.CoreV1().ConfigMaps(namespace).List(listOpts)
+	if err != nil {
+		return fmt.Errorf("failed to list device in use configmaps: %+v", err)
+	}
+
+	for _, cm := range cms.Items {
+		node := cm.ObjectMeta.Labels[discoverDaemon.NodeAttr]
+		if node != nodeName {
+			continue
+		}
+		deviceJson := cm.Data[discoverDaemon.LocalDiskCMData]
+		logger.Debugf("node %s, device in use %s", node, deviceJson)
+
+		if len(node) == 0 || len(deviceJson) == 0 {
+			continue
+		}
+		devicesInUse := []sys.LocalDisk{}
+		err = json.Unmarshal([]byte(deviceJson), &devicesInUse)
+		if err != nil {
+			logger.Warningf("failed to unmarshal %s", deviceJson)
+			continue
+		}
+		newDevicesInUse := []sys.LocalDisk{}
+		for i := range devicesInUse {
+			stillInUse := true
+			for j := range devicesToFree {
+				if devicesInUse[i].Name == devicesToFree[j].Name {
+					stillInUse = false
+					break
+				}
+			}
+			if stillInUse {
+				newDevicesInUse = append(newDevicesInUse, devicesInUse[i])
+			}
+		}
+		logger.Infof("new devices in use %+v", newDevicesInUse)
+		// update configmap
+		newDeviceJson, err := json.Marshal(newDevicesInUse)
+		if err != nil {
+			logger.Infof("failed to marshal: %v", err)
+			return err
+		}
+		data := make(map[string]string, 1)
+		data[discoverDaemon.LocalDiskCMData] = string(newDeviceJson)
+		cm.Data = data
+		_, err = context.Clientset.CoreV1().ConfigMaps(namespace).Update(&cm)
+		if err != nil {
+			logger.Warningf("failed to update device in use on node %s: %v", nodeName, err)
+		}
+		return err
+	}
+	return nil
+}
+
 func GetAvailableDevices(context *clusterd.Context, nodeName, clusterName string, devices []rookalpha.Device, filter string, useAllDevices bool) ([]rookalpha.Device, error) {
 	results := []rookalpha.Device{}
 	if len(devices) == 0 && len(filter) == 0 && !useAllDevices {
 		return results, nil
 	}
 	namespace := os.Getenv(k8sutil.PodNamespaceEnvVar)
+	// find all devices
 	allDevices, err := ListDevices(context, namespace, nodeName)
 	if err != nil {
 		return results, err
 	}
-	nodeDevices, ok := allDevices[nodeName]
+	// find those on the node
+	nodeAllDevices, ok := allDevices[nodeName]
 	if !ok {
 		return results, fmt.Errorf("node %s has no devices", nodeName)
 	}
+	// find those in use on the node
+	devicesInUse, cm, err := ListDevicesInUse(context, namespace, nodeName)
+	if err != nil {
+		return results, err
+	}
+	// filter those in use
+	nodeDevices := []sys.LocalDisk{}
+	for i := range nodeAllDevices {
+		isInUse := false
+		for j := range devicesInUse {
+			if nodeAllDevices[i].Name == devicesInUse[j].Name {
+				isInUse = true
+				break
+			}
+		}
+		if !isInUse {
+			nodeDevices = append(nodeDevices, nodeAllDevices[i])
+		}
+	}
+
+	// now those left are free to use
 	if len(devices) > 0 {
 		for i := range devices {
 			for j := range nodeDevices {
 				if devices[i].Name == nodeDevices[j].Name {
 					results = append(results, devices[i])
+					devicesInUse = append(devicesInUse, nodeDevices[j])
 				}
 			}
 		}
@@ -248,6 +383,7 @@ func GetAvailableDevices(context *clusterd.Context, nodeName, clusterName string
 				d := rookalpha.Device{
 					Name: nodeDevices[i].Name,
 				}
+				devicesInUse = append(devicesInUse, nodeDevices[i])
 				results = append(results, d)
 			}
 		}
@@ -257,8 +393,24 @@ func GetAvailableDevices(context *clusterd.Context, nodeName, clusterName string
 				Name: nodeDevices[i].Name,
 			}
 			results = append(results, d)
+			devicesInUse = append(devicesInUse, nodeDevices[i])
 		}
 	}
-
+	// mark these devices in use
+	if len(results) > 0 {
+		deviceJson, err := json.Marshal(devicesInUse)
+		if err != nil {
+			logger.Infof("failed to marshal: %v", err)
+			return results, err
+		}
+		data := make(map[string]string, 1)
+		data[discoverDaemon.LocalDiskCMData] = string(deviceJson)
+		cm.Data = data
+		_, err = context.Clientset.CoreV1().ConfigMaps(namespace).Update(cm)
+		if err != nil {
+			logger.Warningf("failed to update device in use on node %s: %v", nodeName, err)
+		}
+		return results, err
+	}
 	return results, nil
 }
