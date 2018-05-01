@@ -98,13 +98,14 @@ func New(context *clusterd.Context, namespace, version string, storageSpec rooka
 }
 
 type OSDInfo struct {
-	ID          string `json:"id"`
+	ID          int    `json:"id"`
 	DataPath    string `json:"data-path"`
 	Config      string `json:"conf"`
 	Cluster     string `json:"cluster"`
 	KeyringPath string `json:"keyring-path"`
 	UUID        string `json:"uuid"`
 	Journal     string `json:"journal"`
+	IsFileStore bool   `json:"is-file-store"`
 }
 
 type OrchestrationStatus struct {
@@ -216,13 +217,15 @@ func (c *Cluster) Start() error {
 
 		// wait for the current node's orchestration to be completed
 		if status, err := c.waitForCompletion(n.Name); err != nil {
+			logger.Warningf("failed to prepare node %s: %v", n.Name, err)
 			errorMessages = append(errorMessages, err.Error())
 			continue
 		} else {
 			// start osds
 			osds := status.OSDs
+			logger.Debugf("osds prepared on node %s: %+v", n.Name, osds)
 			for osd := range osds {
-				logger.Infof("start osd %v", osd)
+				logger.Debugf("start osd %v", osd)
 			}
 
 		}
@@ -435,7 +438,7 @@ func (c *Cluster) waitForCompletion(node string) (*OrchestrationStatus, error) {
 	}
 
 	// start watching for changes on the orchestration status map
-	var startingVersion string
+	startingVersion := "0"
 	if cm != nil {
 		startingVersion = cm.ResourceVersion
 	}
@@ -461,7 +464,6 @@ func (c *Cluster) waitForCompletion(node string) (*OrchestrationStatus, error) {
 					<-time.After(100 * time.Millisecond)
 					break ResultLoop
 				}
-
 				if e.Type == watch.Modified {
 					statusMap := e.Object.(*v1.ConfigMap)
 					status := parseOrchestrationStatus(statusMap.Data, node)

@@ -442,9 +442,8 @@ func (a *OsdAgent) startOSD(context *clusterd.Context, cfg *osdConfig) (*oposd.O
 		logger.Infof("done with preparing osd %v", osdInfo)
 		return osdInfo, nil
 	}
-	isFS := isFilestore(cfg)
 	// run the OSD in a child process now that it is fully initialized and ready to go
-	err = a.runOSD(cfg.id, isFS, osdInfo)
+	err = a.runOSD(osdInfo)
 	if err != nil {
 		return osdInfo, fmt.Errorf("failed to run osd %d: %+v", cfg.id, err)
 	}
@@ -477,12 +476,13 @@ func getOSDInfo(clusterName string, config *osdConfig) *oposd.OSDInfo {
 	confFile := getOSDConfFilePath(config.rootPath, clusterName)
 	util.WriteFileToLog(logger, confFile)
 	osd := &oposd.OSDInfo{
-		ID:          fmt.Sprintf("%d", config.id),
+		ID:          config.id,
 		DataPath:    config.rootPath,
 		Config:      confFile,
 		Cluster:     clusterName,
 		KeyringPath: getOSDKeyringPath(config.rootPath),
 		UUID:        config.uuid.String(),
+		IsFileStore: isFilestore(config),
 	}
 
 	if isFilestore(config) {
@@ -492,7 +492,7 @@ func getOSDInfo(clusterName string, config *osdConfig) *oposd.OSDInfo {
 }
 
 // runs an OSD with the given config in a child process
-func (a *OsdAgent) runOSD(id int, isFS bool, osdInfo *oposd.OSDInfo) error {
+func (a *OsdAgent) runOSD(osdInfo *oposd.OSDInfo) error {
 	// start the OSD daemon in the foreground with the given config
 	logger.Infof("starting osd %s at %s", osdInfo.ID, osdInfo.DataPath)
 
@@ -506,12 +506,12 @@ func (a *OsdAgent) runOSD(id int, isFS bool, osdInfo *oposd.OSDInfo) error {
 		osdUUIDArg,
 	}
 
-	if isFS {
+	if osdInfo.IsFileStore {
 		params = append(params, fmt.Sprintf("--osd-journal=%s", osdInfo.Journal))
 	}
 
 	process, err := a.procMan.Start(
-		fmt.Sprintf("osd%d", id),
+		fmt.Sprintf("osd%d", osdInfo.ID),
 		"ceph-osd",
 		regexp.QuoteMeta(osdUUIDArg),
 		proc.ReuseExisting,
@@ -522,7 +522,7 @@ func (a *OsdAgent) runOSD(id int, isFS bool, osdInfo *oposd.OSDInfo) error {
 
 	if process != nil {
 		// if the process was already running Start will return nil in which case we don't want to overwrite it
-		a.osdProc[id] = process
+		a.osdProc[osdInfo.ID] = process
 	}
 
 	return nil
