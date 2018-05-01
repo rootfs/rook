@@ -54,6 +54,8 @@ const (
 	OrchestrationStatusCompleted     = "completed"
 	OrchestrationStatusFailed        = "failed"
 	appName                          = "rook-ceph-osd"
+	prepareAppNameFmt                = "rook-ceph-osd-prepare-%s"
+	osdAppNameFmt                    = "rook-ceph-osd-node-%s-id-%d"
 	appNameFmt                       = "rook-ceph-osd-%s"
 	clusterAvailableSpaceReserve     = 0.05
 )
