@@ -59,15 +59,17 @@ type OsdAgent struct {
 	kv                *k8sutil.ConfigMapKVStore
 	configCounter     int32
 	osdsCompleted     chan struct{}
+	prepareOnly       bool
 }
 
 func NewAgent(context *clusterd.Context, devices string, usingDeviceFilter bool, metadataDevice, directories string, forceFormat bool,
-	location string, storeConfig rookalpha.StoreConfig, cluster *mon.ClusterInfo, nodeName string, kv *k8sutil.ConfigMapKVStore) *OsdAgent {
+	location string, storeConfig rookalpha.StoreConfig, cluster *mon.ClusterInfo, nodeName string, kv *k8sutil.ConfigMapKVStore, prepareOnly bool) *OsdAgent {
 
 	return &OsdAgent{devices: devices, usingDeviceFilter: usingDeviceFilter, metadataDevice: metadataDevice,
 		directories: directories, forceFormat: forceFormat, location: location, storeConfig: storeConfig,
 		cluster: cluster, nodeName: nodeName, kv: kv,
 		procMan: proc.New(context.Executor), osdProc: make(map[int]*proc.MonitoredProc),
+		prepareOnly: prepareOnly,
 	}
 }
 
@@ -427,6 +429,11 @@ func (a *OsdAgent) startOSD(context *clusterd.Context, cfg *osdConfig) error {
 		if err != nil {
 			return fmt.Errorf("failed to get OSD information from %s: %+v", cfg.rootPath, err)
 		}
+	}
+
+	if a.prepareOnly {
+		logger.Infof("done with preparing osds")
+		return nil
 	}
 
 	// run the OSD in a child process now that it is fully initialized and ready to go
