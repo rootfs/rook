@@ -18,6 +18,8 @@ package integration
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"time"
 
 	"testing"
@@ -125,8 +127,18 @@ func StartBaseTestOperations(t func() *testing.T, namespace, storeType, dataDirH
 
 //SetUpRook is a wrapper for setting up rook
 func (op BaseTestOperations) SetUp() {
+	if err := os.MkdirAll(op.dataDirHostPath, 0755); err != nil {
+		logger.Warningf("failed to mkdir %s:%v", op.dataDirHostPath, err)
+		return
+	}
+	dataDir, err := ioutil.TempDir(op.dataDirHostPath, "test-")
+	if err != nil {
+		logger.Warningf("failed to make temp dir %s: %v", op.dataDirHostPath, err)
+		return
+	}
+	op.dataDirHostPath = dataDir
 	isRookInstalled, err := op.installer.InstallRookOnK8sWithHostPathAndDevices(op.namespace, op.storeType,
-		op.dataDirHostPath, op.helmInstalled, op.useDevices, op.mons, false /* startWithAllNodes */)
+		dataDir, op.helmInstalled, op.useDevices, op.mons, false /* startWithAllNodes */)
 	assert.NoError(op.T(), err)
 	if !isRookInstalled {
 		logger.Errorf("Rook was not installed successfully")
@@ -141,5 +153,6 @@ func (op BaseTestOperations) TearDown() {
 	if op.installer.T().Failed() {
 		op.installer.GatherAllRookLogs(op.namespace, op.installer.T().Name())
 	}
+	os.RemoveAll(op.dataDirHostPath)
 	op.installer.UninstallRook(op.helmInstalled, op.namespace)
 }

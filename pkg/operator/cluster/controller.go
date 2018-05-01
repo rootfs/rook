@@ -33,6 +33,7 @@ import (
 	"github.com/rook/rook/pkg/operator/cluster/ceph/mgr"
 	"github.com/rook/rook/pkg/operator/cluster/ceph/mon"
 	"github.com/rook/rook/pkg/operator/cluster/ceph/osd"
+	"github.com/rook/rook/pkg/operator/discover"
 	"github.com/rook/rook/pkg/operator/file"
 	"github.com/rook/rook/pkg/operator/k8sutil"
 	"github.com/rook/rook/pkg/operator/object"
@@ -293,6 +294,7 @@ func (c *ClusterController) onDelete(obj interface{}) {
 	if clust.Spec.Storage.AnyUseAllDevices() {
 		c.devicesInUse = false
 	}
+	discover.FreeDevicesByCluster(c.context, clust.Name)
 }
 
 func (c *ClusterController) addFinalizer(clust *rookalpha.Cluster) error {
