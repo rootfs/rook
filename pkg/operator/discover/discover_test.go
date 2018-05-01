@@ -111,6 +111,10 @@ func TestGetAvailableDevices(t *testing.T) {
 		},
 	}
 
+	nodeDevices, err := ListDevices(context, ns, "" /* all nodes */)
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(nodeDevices))
+
 	devices, err := GetAvailableDevices(context, nodeName, ns, d, "^sd.", false)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(devices))
@@ -120,5 +124,4 @@ func TestGetAvailableDevices(t *testing.T) {
 	devices, err = GetAvailableDevices(context, nodeName, ns, nil, "", true)
 	assert.Nil(t, err)
 	assert.Equal(t, 5, len(devices))
-
 }

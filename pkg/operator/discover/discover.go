@@ -203,7 +203,7 @@ func ListDevices(context *clusterd.Context, namespace, nodeName string) (map[str
 		deviceJson := cm.Data[discoverDaemon.LocalDiskCMData]
 		logger.Debugf("node %s, device %s", node, deviceJson)
 
-		if len(nodeName) == 0 || len(deviceJson) == 0 {
+		if len(node) == 0 || len(deviceJson) == 0 {
 			continue
 		}
 		var d []sys.LocalDisk
