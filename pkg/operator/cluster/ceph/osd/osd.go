@@ -97,9 +97,20 @@ func New(context *clusterd.Context, namespace, version string, storageSpec rooka
 	}
 }
 
+type OSDInfo struct {
+	ID          string `json:"id"`
+	DataPath    string `json:"data-path"`
+	Config      string `json:"conf"`
+	Cluster     string `json:"cluster"`
+	KeyringPath string `json:"keyring-path"`
+	UUID        string `json:"uuid"`
+	Journal     string `json:"journal"`
+}
+
 type OrchestrationStatus struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
+	OSDs    []OSDInfo `json:"osds"`
+	Status  string    `json:"status"`
+	Message string    `json:"message"`
 }
 
 // Start the osd management
@@ -153,7 +164,7 @@ func (c *Cluster) Start() error {
 	// are resuming a previous orchestration attempt)
 	if inProgressNode, status := c.findInProgressNode(); inProgressNode != "" {
 		logger.Infof("resuming orchestration of in progress node %s, status: %+v", inProgressNode, status)
-		if err := c.waitForCompletion(inProgressNode); err != nil {
+		if _, err := c.waitForCompletion(inProgressNode); err != nil {
 			logger.Warningf("failed waiting for in progress node %s, will continue with orchestration.  %+v", inProgressNode, err)
 		}
 	}
@@ -180,18 +191,18 @@ func (c *Cluster) Start() error {
 			devicesToUse = availDev
 			logger.Infof("avail devices for node %s: %+v", n.Name, availDev)
 		}
-		// create the replicaSet that will run the OSDs for this node
-		rs := c.makeJob(n.Name, devicesToUse, n.Selection, resources, n.Config)
-		_, err := c.context.Clientset.Batch().Jobs(c.Namespace).Create(rs)
+		// create the job that prepares osds on the node
+		job := c.makeJob(n.Name, devicesToUse, n.Selection, resources, n.Config)
+		_, err := c.context.Clientset.Batch().Jobs(c.Namespace).Create(job)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
-				// we failed to create the replica set, update the orchestration status for this node
-				message := fmt.Sprintf("failed to create osd replica set for node %s. %+v", n.Name, err)
+				// we failed to create job, update the orchestration status for this node
+				message := fmt.Sprintf("failed to create osd prepare job for node %s. %+v", n.Name, err)
 				c.handleOrchestrationFailure(*n, message, &errorMessages)
 				continue
 			} else {
-				// TODO: if the replica set already exists, we may need to edit the pod template spec, for example if device filter has changed
-				message := fmt.Sprintf("osd replica set already exists for node %s", n.Name)
+				// TODO: if the job already exists, we may need to edit the pod template spec, for example if device filter has changed
+				message := fmt.Sprintf("osd prepare job already exists for node %s", n.Name)
 				logger.Info(message)
 				status := OrchestrationStatus{Status: OrchestrationStatusCompleted, Message: message}
 				if err := UpdateOrchestrationStatusMap(c.context.Clientset, c.Namespace, n.Name, status); err != nil {
@@ -200,13 +211,20 @@ func (c *Cluster) Start() error {
 				}
 			}
 		} else {
-			logger.Infof("osd replica set started for node %s", n.Name)
+			logger.Infof("osd prepare job started for node %s", n.Name)
 		}
 
 		// wait for the current node's orchestration to be completed
-		if err := c.waitForCompletion(n.Name); err != nil {
+		if status, err := c.waitForCompletion(n.Name); err != nil {
 			errorMessages = append(errorMessages, err.Error())
 			continue
+		} else {
+			// start osds
+			osds := status.OSDs
+			for osd := range osds {
+				logger.Infof("start osd %v", osd)
+			}
+
 		}
 	}
 
@@ -252,7 +270,7 @@ func (c *Cluster) Start() error {
 		}
 
 		// wait for the removed node's orchestration to be completed
-		if err := c.waitForCompletion(n.Name); err != nil {
+		if _, err := c.waitForCompletion(n.Name); err != nil {
 			errorMessages = append(errorMessages, err.Error())
 			continue
 		}
@@ -396,12 +414,12 @@ func (c *Cluster) findInProgressNode() (string, *OrchestrationStatus) {
 	return "", nil
 }
 
-func (c *Cluster) waitForCompletion(node string) error {
+func (c *Cluster) waitForCompletion(node string) (*OrchestrationStatus, error) {
 	// check the status map to see if the node is already completed before we start watching
 	cm, err := c.context.Clientset.CoreV1().ConfigMaps(c.Namespace).Get(OrchestrationStatusMapName, metav1.GetOptions{})
 	if err != nil {
 		if !errors.IsNotFound(err) {
-			return err
+			return nil, err
 		}
 		// the status map doesn't exist yet, watching below is still an OK thing to do
 	} else {
@@ -409,9 +427,9 @@ func (c *Cluster) waitForCompletion(node string) error {
 		status := parseOrchestrationStatus(cm.Data, node)
 		if status != nil {
 			if status.Status == OrchestrationStatusCompleted {
-				return nil
+				return status, nil
 			} else if status.Status == OrchestrationStatusFailed {
-				return fmt.Errorf("orchestration for node %s failed: %+v", node, status)
+				return nil, fmt.Errorf("orchestration for node %s failed: %+v", node, status)
 			}
 		}
 	}
@@ -429,7 +447,7 @@ func (c *Cluster) waitForCompletion(node string) error {
 	for {
 		w, err := c.context.Clientset.CoreV1().ConfigMaps(c.Namespace).Watch(opts)
 		if err != nil {
-			return fmt.Errorf("failed to start watch on %s: %+v", OrchestrationStatusMapName, err)
+			return nil, fmt.Errorf("failed to start watch on %s: %+v", OrchestrationStatusMapName, err)
 		}
 		defer w.Stop()
 
@@ -452,9 +470,9 @@ func (c *Cluster) waitForCompletion(node string) error {
 					}
 
 					if status.Status == OrchestrationStatusCompleted {
-						return nil
+						return status, nil
 					} else if status.Status == OrchestrationStatusFailed {
-						return fmt.Errorf("orchestration for node %s failed: %+v", node, status)
+						return nil, fmt.Errorf("orchestration for node %s failed: %+v", node, status)
 					}
 				}
 
