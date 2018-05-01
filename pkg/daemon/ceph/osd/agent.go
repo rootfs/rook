@@ -439,7 +439,7 @@ func (a *OsdAgent) startOSD(context *clusterd.Context, cfg *osdConfig) (*oposd.O
 	}
 	osdInfo := getOSDInfo(a.cluster.Name, cfg)
 	if a.prepareOnly {
-		logger.Infof("done with preparing osds")
+		logger.Infof("done with preparing osd %v", osdInfo)
 		return osdInfo, nil
 	}
 	isFS := isFilestore(cfg)

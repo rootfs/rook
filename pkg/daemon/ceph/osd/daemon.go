@@ -146,8 +146,9 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 		}
 	}
 	logger.Infof("device osds:%v\ndir osds: %v", deviceOSDs, dirOSDs)
+	osds := append(deviceOSDs, dirOSDs...)
 	// orchestration is completed, update the status
-	status = oposd.OrchestrationStatus{Status: oposd.OrchestrationStatusCompleted}
+	status = oposd.OrchestrationStatus{OSDs: osds, Status: oposd.OrchestrationStatusCompleted}
 	if err := oposd.UpdateOrchestrationStatusMap(context.Clientset, agent.cluster.Name, agent.nodeName, status); err != nil {
 		return err
 	}
