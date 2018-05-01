@@ -20,6 +20,7 @@ package osd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -131,19 +132,21 @@ func (c *Cluster) Start() error {
 	}()
 
 	if c.Storage.UseAllNodes {
-		// make a daemonset for all nodes in the cluster
-		ds := c.makeDaemonSet(c.Storage.Selection, c.Storage.Config)
-		_, err := c.context.Clientset.Extensions().DaemonSets(c.Namespace).Create(ds)
+		// resolve all storage nodes
+		c.Storage.Nodes = nil
+		rookSystemNS := os.Getenv(k8sutil.PodNamespaceEnvVar)
+		allNodeDevices, err := discover.ListDevices(c.context, rookSystemNS, "" /* all nodes */)
 		if err != nil {
-			if !errors.IsAlreadyExists(err) {
-				return fmt.Errorf("failed to create osd daemon set. %+v", err)
-			}
-			logger.Infof("osd daemon set already exists")
-		} else {
-			logger.Infof("osd daemon set started")
+			logger.Warningf("failed to get storage nodes from namespace %s: %v", rookSystemNS, err)
+			return err
 		}
-
-		return nil
+		for nodeName, _ := range allNodeDevices {
+			storageNode := rookalpha.Node{
+				Name: nodeName,
+			}
+			c.Storage.Nodes = append(c.Storage.Nodes, storageNode)
+		}
+		logger.Debugf("storage nodes: %+v", c.Storage.Nodes)
 	}
 
 	// orchestrate individual nodes, starting with any that are still ongoing (in the case that we
