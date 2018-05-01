@@ -226,10 +226,19 @@ func (c *Cluster) Start() error {
 			// start osds
 			osds := status.OSDs
 			logger.Debugf("osds prepared on node %s: %+v", n.Name, osds)
-			for osd := range osds {
+			for _, osd := range osds {
 				logger.Debugf("start osd %v", osd)
-			}
+				rs := c.makeOSDReplicaSet(n.Name, devicesToUse, n.Selection, resources, osd)
+				rs, err := c.context.Clientset.Extensions().ReplicaSets(c.Namespace).Create(rs)
+				if err != nil {
+					if !errors.IsAlreadyExists(err) {
+						// we failed to create job, update the orchestration status for this node
+						logger.Warningf("failed to create osd replica set for node %s, osd %v: %+v", n.Name, osd, err)
 
+						continue
+					}
+				}
+			}
 		}
 	}
 
