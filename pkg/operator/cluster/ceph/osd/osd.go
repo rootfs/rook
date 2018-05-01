@@ -181,8 +181,8 @@ func (c *Cluster) Start() error {
 			logger.Infof("avail devices for node %s: %+v", n.Name, availDev)
 		}
 		// create the replicaSet that will run the OSDs for this node
-		rs := c.makeReplicaSet(n.Name, devicesToUse, n.Selection, resources, n.Config)
-		_, err := c.context.Clientset.Extensions().ReplicaSets(c.Namespace).Create(rs)
+		rs := c.makeJob(n.Name, devicesToUse, n.Selection, resources, n.Config)
+		_, err := c.context.Clientset.Batch().Jobs(c.Namespace).Create(rs)
 		if err != nil {
 			if !errors.IsAlreadyExists(err) {
 				// we failed to create the replica set, update the orchestration status for this node

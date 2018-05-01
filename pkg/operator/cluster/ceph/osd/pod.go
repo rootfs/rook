@@ -25,8 +25,11 @@ import (
 	rookalpha "github.com/rook/rook/pkg/apis/rook.io/v1alpha1"
 	opmon "github.com/rook/rook/pkg/operator/cluster/ceph/mon"
 	"github.com/rook/rook/pkg/operator/k8sutil"
+
+	batch "k8s.io/api/batch/v1"
 	"k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/kubelet/apis"
 )
@@ -41,7 +44,7 @@ const (
 )
 
 func (c *Cluster) makeDaemonSet(selection rookalpha.Selection, config rookalpha.Config) *extensions.DaemonSet {
-	podSpec := c.podTemplateSpec(nil, selection, c.resources, config)
+	podSpec := c.podTemplateSpec(nil, selection, c.resources, config, false /* prepareOnly */, v1.RestartPolicyAlways)
 	return &extensions.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            appName,
@@ -61,10 +64,32 @@ func (c *Cluster) makeDaemonSet(selection rookalpha.Selection, config rookalpha.
 	}
 }
 
+func (c *Cluster) makeJob(nodeName string, devices []rookalpha.Device,
+	selection rookalpha.Selection, resources v1.ResourceRequirements, config rookalpha.Config) *batch.Job {
+
+	podSpec := c.podTemplateSpec(devices, selection, resources, config, true /* prepare-only */, v1.RestartPolicyOnFailure)
+	podSpec.Spec.NodeSelector = map[string]string{apis.LabelHostname: nodeName}
+
+	return &batch.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            fmt.Sprintf(appNameFmt, nodeName),
+			Namespace:       c.Namespace,
+			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
+			Labels: map[string]string{
+				k8sutil.AppAttr:     appName,
+				k8sutil.ClusterAttr: c.Namespace,
+			},
+		},
+		Spec: batch.JobSpec{
+			Template: podSpec,
+		},
+	}
+}
+
 func (c *Cluster) makeReplicaSet(nodeName string, devices []rookalpha.Device,
 	selection rookalpha.Selection, resources v1.ResourceRequirements, config rookalpha.Config) *extensions.ReplicaSet {
 
-	podSpec := c.podTemplateSpec(devices, selection, resources, config)
+	podSpec := c.podTemplateSpec(devices, selection, resources, config, false /* prepareOnly */, v1.RestartPolicyAlways)
 	podSpec.Spec.NodeSelector = map[string]string{apis.LabelHostname: nodeName}
 	replicaCount := int32(1)
 
@@ -86,7 +111,7 @@ func (c *Cluster) makeReplicaSet(nodeName string, devices []rookalpha.Device,
 }
 
 func (c *Cluster) podTemplateSpec(devices []rookalpha.Device, selection rookalpha.Selection,
-	resources v1.ResourceRequirements, config rookalpha.Config) v1.PodTemplateSpec {
+	resources v1.ResourceRequirements, config rookalpha.Config, prepareOnly bool, restart v1.RestartPolicy) v1.PodTemplateSpec {
 	// by default, the data/config dir will be an empty volume
 	dataDirSource := v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}}
 	if c.dataDirHostPath != "" {
@@ -117,8 +142,8 @@ func (c *Cluster) podTemplateSpec(devices []rookalpha.Device, selection rookalph
 
 	podSpec := v1.PodSpec{
 		ServiceAccountName: appName,
-		Containers:         []v1.Container{c.osdContainer(devices, selection, resources, config)},
-		RestartPolicy:      v1.RestartPolicyAlways,
+		Containers:         []v1.Container{c.osdContainer(devices, selection, resources, config, prepareOnly)},
+		RestartPolicy:      restart,
 		Volumes:            volumes,
 		HostNetwork:        c.HostNetwork,
 	}
@@ -141,7 +166,7 @@ func (c *Cluster) podTemplateSpec(devices []rookalpha.Device, selection rookalph
 }
 
 func (c *Cluster) osdContainer(devices []rookalpha.Device, selection rookalpha.Selection,
-	resources v1.ResourceRequirements, config rookalpha.Config) v1.Container {
+	resources v1.ResourceRequirements, config rookalpha.Config, prepareOnly bool) v1.Container {
 
 	envVars := []v1.EnvVar{
 		nodeNameEnvVar(),
@@ -154,6 +179,7 @@ func (c *Cluster) osdContainer(devices []rookalpha.Device, selection rookalpha.S
 		opmon.AdminSecretEnvVar(),
 		k8sutil.ConfigDirEnvVar(),
 		k8sutil.ConfigOverrideEnvVar(),
+		{Name: "PREPARE_ONLY", Value: strconv.FormatBool(prepareOnly)},
 	}
 
 	devMountNeeded := false
