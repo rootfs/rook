@@ -72,7 +72,7 @@ func (c *Cluster) makeJob(nodeName string, devices []rookalpha.Device,
 
 	return &batch.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            fmt.Sprintf(appNameFmt, nodeName),
+			Name:            fmt.Sprintf(prepareAppNameFmt, nodeName),
 			Namespace:       c.Namespace,
 			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
 			Labels: map[string]string{
@@ -102,6 +102,11 @@ func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device,
 	volumes := []v1.Volume{
 		{Name: k8sutil.DataDirVolume, VolumeSource: dataDirSource},
 		k8sutil.ConfigOverrideVolume(),
+	}
+	envVars := []v1.EnvVar{
+		nodeNameEnvVar(),
+		k8sutil.PodIPEnvVar(k8sutil.PrivateIPEnvVar),
+		k8sutil.PodIPEnvVar(k8sutil.PublicIPEnvVar),
 	}
 
 	// by default, don't define any volume config unless it is required
@@ -150,18 +155,21 @@ func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device,
 					DNSPolicy:          DNSPolicy,
 					Containers: []v1.Container{
 						{
-							Command: []string{"ceph-osd",
-								"--foreground",
-								"--id", fmt.Sprintf("%d", osd.ID),
-								"--conf", osd.Config,
-								"--osd-data", osd.DataPath,
-								"--keyring", osd.KeyringPath,
-								"--cluster", osd.Cluster,
-								"--osd-uuid", osd.UUID,
+							Command: []string{"sh", "-c",
+								fmt.Sprintf("ceph-osd --foreground --id %d --conf %s --osd-data %s --keyring %s --cluster %s --osd-uuid %s %s %s",
+									osd.ID,
+									osd.Config,
+									osd.DataPath,
+									osd.KeyringPath,
+									osd.Cluster,
+									osd.UUID,
+									fmt.Sprintf("--public-addr=${%s}", k8sutil.PublicIPEnvVar),
+									fmt.Sprintf("--cluster-addr=${%s}", k8sutil.PrivateIPEnvVar)),
 							},
 							Name:         appName,
 							Image:        k8sutil.MakeRookImage(c.Version),
 							VolumeMounts: volumeMounts,
+							Env:          envVars,
 							Resources:    resources,
 							SecurityContext: &v1.SecurityContext{
 								Privileged:             &privileged,

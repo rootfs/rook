@@ -47,7 +47,12 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 	// set the crush location in the osd config file
 	cephConfig := mon.CreateDefaultCephConfig(context, agent.cluster, path.Join(context.ConfigDir, agent.cluster.Name))
 	cephConfig.GlobalConfig.CrushLocation = agent.location
-
+	// don't set public or cluster addr if prepare only
+	if agent.prepareOnly {
+		cephConfig.PublicAddr = ""
+		cephConfig.ClusterAddr = ""
+	}
+	logger.Infof("prepareOnly %v, config %v", agent.prepareOnly, cephConfig)
 	// write the latest config to the config dir
 	if err := mon.GenerateAdminConnectionConfigWithSettings(context, agent.cluster, cephConfig); err != nil {
 		return fmt.Errorf("failed to write connection config. %+v", err)

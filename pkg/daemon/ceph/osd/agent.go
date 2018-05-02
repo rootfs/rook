@@ -419,13 +419,13 @@ func (a *OsdAgent) startOSD(context *clusterd.Context, cfg *osdConfig) (*oposd.O
 		}
 
 		// osd_data_dir/ready does not exist yet, create/initialize the OSD
-		err := initializeOSD(cfg, context, a.cluster, a.location)
+		err := initializeOSD(cfg, context, a.cluster, a.location, a.prepareOnly)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize OSD at %s: %+v", cfg.rootPath, err)
 		}
 	} else {
 		// update the osd config file
-		err := writeConfigFile(cfg, context, a.cluster, a.location)
+		err := writeConfigFile(cfg, context, a.cluster, a.location, a.prepareOnly)
 		if err != nil {
 			logger.Warningf("failed to update config file. %+v", err)
 		}
