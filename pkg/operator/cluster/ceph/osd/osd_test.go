@@ -257,7 +257,18 @@ func mockNodeOrchestrationCompletion(c *Cluster, nodeName string, statusMapWatch
 			if status != nil && status.Status == OrchestrationStatusStarting {
 				// the node has started orchestration, simulate its completion now by performing 2 tasks:
 				// 1) update the config map manually (which doesn't trigger a watch event, see https://github.com/kubernetes/kubernetes/issues/54075#issuecomment-337298950)
-				status = &OrchestrationStatus{Status: OrchestrationStatusCompleted}
+				status = &OrchestrationStatus{
+					OSDs: []OSDInfo{
+						{
+							ID:          1,
+							DataPath:    "/tmp",
+							Config:      "/foo/bar/ceph.conf",
+							Cluster:     "rook",
+							KeyringPath: "/foo/bar/key",
+						},
+					},
+					Status: OrchestrationStatusCompleted,
+				}
 				UpdateOrchestrationStatusMap(c.context.Clientset, c.Namespace, nodeName, *status)
 
 				// 2) call modify on the fake watcher so a watch event will get triggered
