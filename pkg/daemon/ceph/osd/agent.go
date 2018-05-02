@@ -112,10 +112,9 @@ func (a *OsdAgent) configureDirs(context *clusterd.Context, dirs map[string]int)
 	return osds, lastErr
 }
 
-func (a *OsdAgent) removeDirs(context *clusterd.Context, removedDirs map[string]int) ([]oposd.OSDInfo, error) {
-	var osds []oposd.OSDInfo
+func (a *OsdAgent) removeDirs(context *clusterd.Context, removedDirs map[string]int) error {
 	if len(removedDirs) == 0 {
-		return osds, nil
+		return nil
 	}
 
 	var errorMessages []string
@@ -135,10 +134,10 @@ func (a *OsdAgent) removeDirs(context *clusterd.Context, removedDirs map[string]
 
 	if len(errorMessages) > 0 {
 		// at least one OSD failed, return an overall error
-		return osds, fmt.Errorf(strings.Join(errorMessages, "\n"))
+		return fmt.Errorf(strings.Join(errorMessages, "\n"))
 	}
 
-	return osds, nil
+	return nil
 }
 
 func (a *OsdAgent) configureDevices(context *clusterd.Context, devices *DeviceOsdMapping) ([]oposd.OSDInfo, error) {
@@ -179,10 +178,9 @@ func (a *OsdAgent) configureDevices(context *clusterd.Context, devices *DeviceOs
 	return osds, nil
 }
 
-func (a *OsdAgent) removeDevices(context *clusterd.Context, removedDevicesScheme *config.PerfScheme) ([]oposd.OSDInfo, error) {
-	var osds []oposd.OSDInfo
+func (a *OsdAgent) removeDevices(context *clusterd.Context, removedDevicesScheme *config.PerfScheme) error {
 	if removedDevicesScheme == nil || len(removedDevicesScheme.Entries) == 0 {
-		return osds, nil
+		return nil
 	}
 
 	var errorMessages []string
@@ -210,10 +208,10 @@ func (a *OsdAgent) removeDevices(context *clusterd.Context, removedDevicesScheme
 
 	if len(errorMessages) > 0 {
 		// at least one OSD failed, return an overall error
-		return osds, fmt.Errorf(strings.Join(errorMessages, "\n"))
+		return fmt.Errorf(strings.Join(errorMessages, "\n"))
 	}
 
-	return osds, nil
+	return nil
 }
 
 // computes a partitioning scheme for all the given desired devices.  This could be devics already in use,

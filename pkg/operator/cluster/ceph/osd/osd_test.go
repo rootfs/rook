@@ -18,11 +18,13 @@ package osd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	rookalpha "github.com/rook/rook/pkg/apis/rook.io/v1alpha1"
 	"github.com/rook/rook/pkg/clusterd"
+	discoverDaemon "github.com/rook/rook/pkg/daemon/discover"
 	"github.com/rook/rook/pkg/operator/cluster/ceph/osd/config"
 	"github.com/rook/rook/pkg/operator/k8sutil"
 	exectest "github.com/rook/rook/pkg/util/exec/test"
@@ -51,6 +53,24 @@ func TestStart(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func createDiscoverConfigmap(nodeName, ns string, clientset *fake.Clientset) error {
+	data := make(map[string]string, 1)
+	data[discoverDaemon.LocalDiskCMData] = `[{"name":"sdx","parent":"","hasChildren":false,"devLinks":"/dev/disk/by-id/scsi-36001405f826bd553d8c4dbf9f41c18be    /dev/disk/by-id/wwn-0x6001405f826bd553d8c4dbf9f41c18be /dev/disk/by-path/ip-127.0.0.1:3260-iscsi-iqn.2016-06.world.srv:storage.target01-lun-1","size":10737418240,"uuid":"","serial":"36001405f826bd553d8c4dbf9f41c18be","type":"disk","rotational":true,"readOnly":false,"ownPartition":true,"filesystem":"","vendor":"LIO-ORG","model":"disk02","wwn":"0x6001405f826bd553","wwnVendorExtension":"0x6001405f826bd553d8c4dbf9f41c18be","empty":true}]`
+	cm := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "local-device-" + nodeName,
+			Namespace: ns,
+			Labels: map[string]string{
+				k8sutil.AppAttr:         discoverDaemon.AppName,
+				discoverDaemon.NodeAttr: nodeName,
+			},
+		},
+		Data: data,
+	}
+	_, err := clientset.CoreV1().ConfigMaps(ns).Create(cm)
+	return err
+}
+
 func TestAddRemoveNode(t *testing.T) {
 	// create a storage spec with the given nodes/devices/dirs
 	nodeName := "node8230"
@@ -66,6 +86,12 @@ func TestAddRemoveNode(t *testing.T) {
 
 	// set up a fake k8s client set and watcher to generate events that the operator will listen to
 	clientset := fake.NewSimpleClientset()
+	os.Setenv(k8sutil.PodNamespaceEnvVar, "rook-system")
+	defer os.Unsetenv(k8sutil.PodNamespaceEnvVar)
+
+	cmErr := createDiscoverConfigmap(nodeName, "rook-system", clientset)
+	assert.Nil(t, cmErr)
+
 	statusMapWatcher := watch.NewFake()
 	clientset.PrependWatchReactor("configmaps", k8stesting.DefaultWatchReactor(statusMapWatcher, nil))
 
@@ -240,7 +266,7 @@ func mockNodeOrchestrationCompletion(c *Cluster, nodeName string, statusMapWatch
 				statusMapWatcher.Modify(cm)
 				break
 			} else {
-				logger.Infof("waiting for node %s orchestration to start. status: %+v", nodeName, *status)
+				logger.Debugf("waiting for node %s orchestration to start. status: %+v", nodeName, *status)
 			}
 		} else {
 			logger.Warningf("failed to get node %s orchestration status, will try again: %+v", nodeName, err)

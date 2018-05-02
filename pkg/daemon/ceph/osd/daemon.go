@@ -52,7 +52,6 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 		cephConfig.PublicAddr = ""
 		cephConfig.ClusterAddr = ""
 	}
-	logger.Infof("prepareOnly %v, config %v", agent.prepareOnly, cephConfig)
 	// write the latest config to the config dir
 	if err := mon.GenerateAdminConnectionConfigWithSettings(context, agent.cluster, cephConfig); err != nil {
 		return fmt.Errorf("failed to write connection config. %+v", err)
@@ -131,12 +130,12 @@ func Run(context *clusterd.Context, agent *OsdAgent, done chan struct{}) error {
 
 	// now we can start removing OSDs from devices and directories
 	logger.Infof("removing osd devices: %+v", removedDevicesScheme)
-	if _, err := agent.removeDevices(context, removedDevicesScheme); err != nil {
+	if err := agent.removeDevices(context, removedDevicesScheme); err != nil {
 		return fmt.Errorf("failed to remove devices. %+v", err)
 	}
 
 	logger.Infof("removing osd dirs: %+v", removedDirs)
-	if _, err := agent.removeDirs(context, removedDirs); err != nil {
+	if err := agent.removeDirs(context, removedDirs); err != nil {
 		return fmt.Errorf("failed to remove dirs. %+v", err)
 	}
 
