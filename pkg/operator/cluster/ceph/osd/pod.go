@@ -109,6 +109,8 @@ func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device,
 		// create volume config for the data dir and /dev so the pod can access devices on the host
 		devVolume := v1.Volume{Name: "devices", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/dev"}}}
 		volumes = append(volumes, devVolume)
+		devMount := v1.VolumeMount{Name: "devices", MountPath: "/dev"}
+		volumeMounts = append(volumeMounts, devMount)
 	}
 
 	privileged := true
