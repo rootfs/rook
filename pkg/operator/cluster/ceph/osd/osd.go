@@ -462,6 +462,7 @@ func (c *Cluster) waitForCompletion(node string) (*OrchestrationStatus, error) {
 	opts := metav1.ListOptions{
 		FieldSelector:   fields.OneTermEqualSelector(api.ObjectNameField, OrchestrationStatusMapName).String(),
 		ResourceVersion: startingVersion,
+		Watch:           true,
 	}
 
 	for {
