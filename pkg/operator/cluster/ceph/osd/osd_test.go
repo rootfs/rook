@@ -192,9 +192,15 @@ func TestAddNodeFailure(t *testing.T) {
 
 	// create a fake clientset that will return an error when the operator tries to create a replica set
 	clientset := fake.NewSimpleClientset()
-	clientset.PrependReactor("create", "replicasets", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
-		return true, nil, fmt.Errorf("mock failed to create replica set")
+	clientset.PrependReactor("create", "jobs", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
+		return true, nil, fmt.Errorf("mock failed to create jobs")
 	})
+
+	os.Setenv(k8sutil.PodNamespaceEnvVar, "rook-system")
+	defer os.Unsetenv(k8sutil.PodNamespaceEnvVar)
+
+	cmErr := createDiscoverConfigmap(nodeName, "rook-system", clientset)
+	assert.Nil(t, cmErr)
 
 	c := New(&clusterd.Context{Clientset: clientset, ConfigDir: "/var/lib/rook", Executor: &exectest.MockExecutor{}}, "ns-add-remove", "myversion",
 		storageSpec, "", rookalpha.Placement{}, false, v1.ResourceRequirements{}, metav1.OwnerReference{})
@@ -295,7 +301,7 @@ func waitForOrchestrationCompletion(c *Cluster, nodeName string, startCompleted 
 		if err == nil {
 			status := parseOrchestrationStatus(cm.Data, nodeName)
 			if status != nil {
-				logger.Infof("start has not completed, status is %+v", status)
+				logger.Debugf("start has not completed, status is %+v", status)
 			}
 		}
 		<-time.After(50 * time.Millisecond)
