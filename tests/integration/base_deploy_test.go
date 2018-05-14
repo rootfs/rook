@@ -155,4 +155,5 @@ func (op BaseTestOperations) TearDown() {
 	}
 	os.RemoveAll(op.dataDirHostPath)
 	op.installer.UninstallRook(op.helmInstalled, op.namespace)
+	op.installer.CleanupCluster(op.namespace)
 }

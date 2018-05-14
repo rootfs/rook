@@ -60,6 +60,7 @@ var (
 type InstallHelper struct {
 	k8shelper   *utils.K8sHelper
 	installData *InstallData
+	dataDir     string
 	helmHelper  *utils.HelmHelper
 	Env         objects.EnvironmentManifest
 	k8sVersion  string
@@ -152,11 +153,11 @@ func (h *InstallHelper) CreateK8sRookCluster(namespace string, storeType string)
 	if err := os.MkdirAll(DefaultDataDirHostPath(), 0777); err != nil {
 		return err
 	}
-	dataDir, err := ioutil.TempDir(DefaultDataDirHostPath(), "test-")
+	h.dataDir, err = ioutil.TempDir(DefaultDataDirHostPath(), "test-")
 	if err != nil {
 		return err
 	}
-	return h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, dataDir, false, 1, true /* startWithAllNodes */)
+	return h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, h.dataDir, false, 1, true /* startWithAllNodes */)
 }
 
 //CreateK8sRookCluster creates rook cluster via kubectl
@@ -397,18 +398,20 @@ func (h *InstallHelper) CleanupCluster(clusterName string) {
 	logger.Infof("Uninstalling All Rook Clusters - %s", clusterName)
 	_, err := h.k8shelper.DeleteResource([]string{"-n", clusterName, "cluster", clusterName})
 	if err != nil {
-		logger.Errorf("Rook Cluster  %s cannot be deleted,err -> %v", clusterName, err)
+		logger.Warningf("Rook Cluster  %s cannot be deleted,err -> %v", clusterName, err)
 	}
 
 	_, err = h.k8shelper.DeleteResource([]string{"-n", clusterName, "serviceaccount", "rook-ceph-osd"})
 	if err != nil {
-		logger.Errorf("rook-ceph-osd service account in namespace %s cannot be deleted,err -> %v", clusterName, err)
-		panic(err)
+		logger.Warningf("rook-ceph-osd service account in namespace %s cannot be deleted,err -> %v", clusterName, err)
 	}
 
 	_, err = h.k8shelper.DeleteResource([]string{"namespace", clusterName})
 	if err != nil {
-		logger.Errorf("namespace  %s cannot be deleted,err -> %v", clusterName, err)
+		logger.Warningf("namespace  %s cannot be deleted,err -> %v", clusterName, err)
+	}
+	if len(h.dataDir) > 0 {
+		os.RemoveAll(h.dataDir)
 	}
 }
 
