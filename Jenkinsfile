@@ -166,6 +166,7 @@ def RunIntegrationTest(k, v) {
             }
             finally{
                 archive '_output/tests/*.log'
+                sh 'sudo chmod -R a+w ${PWD}'
                 deleteDir()
             }
         }
