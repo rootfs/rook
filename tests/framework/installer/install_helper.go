@@ -411,7 +411,8 @@ func (h *InstallHelper) CleanupCluster(clusterName string) {
 		logger.Warningf("namespace  %s cannot be deleted,err -> %v", clusterName, err)
 	}
 	if len(h.dataDir) > 0 {
-		os.RemoveAll(h.dataDir)
+		err = os.RemoveAll(h.dataDir)
+		logger.Infof("removing %s, err %v", h.dataDir, err)
 	}
 }
 
