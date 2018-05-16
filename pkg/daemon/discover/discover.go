@@ -158,6 +158,8 @@ func probeDevices(context *clusterd.Context) ([]sys.LocalDisk, error) {
 		}
 		device.Partitions = partitions
 		device.Filesystem = fs
+		device.Empty = clusterd.GetDeviceEmpty(device)
+
 		devices = append(devices, *device)
 	}
 
