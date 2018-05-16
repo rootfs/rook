@@ -87,7 +87,7 @@ func (c *Cluster) makeJob(nodeName string, devices []rookalpha.Device,
 	}
 }
 
-func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device, selection rookalpha.Selection, resources v1.ResourceRequirements, osd OSDInfo) *extensions.ReplicaSet {
+func (c *Cluster) makeOSDDeployment(nodeName string, devices []rookalpha.Device, selection rookalpha.Selection, resources v1.ResourceRequirements, osd OSDInfo) *extensions.Deployment {
 	replicaCount := int32(1)
 	volumeMounts := []v1.VolumeMount{
 		{Name: k8sutil.DataDirVolume, MountPath: k8sutil.DataDir},
@@ -131,7 +131,7 @@ func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device,
 	if osd.IsFileStore {
 		journalStr = fmt.Sprintf("--osd-journal=%s", osd.Journal)
 	}
-	return &extensions.ReplicaSet{
+	return &extensions.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            fmt.Sprintf(osdAppNameFmt, nodeName, osd.ID),
 			Namespace:       c.Namespace,
@@ -141,7 +141,7 @@ func (c *Cluster) makeOSDReplicaSet(nodeName string, devices []rookalpha.Device,
 				k8sutil.ClusterAttr: c.Namespace,
 			},
 		},
-		Spec: extensions.ReplicaSetSpec{
+		Spec: extensions.DeploymentSpec{
 			Template: v1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: appName,
