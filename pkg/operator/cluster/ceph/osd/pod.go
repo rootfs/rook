@@ -133,7 +133,7 @@ func (c *Cluster) makeOSDDeployment(nodeName string, devices []rookalpha.Device,
 	}
 	return &extensions.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            fmt.Sprintf(osdAppNameFmt, nodeName, osd.ID),
+			Name:            fmt.Sprintf(osdAppNameFmt, osd.ID),
 			Namespace:       c.Namespace,
 			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
 			Labels: map[string]string{

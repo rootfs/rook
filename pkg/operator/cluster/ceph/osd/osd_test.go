@@ -126,7 +126,7 @@ func TestAddRemoveNode(t *testing.T) {
 	osdPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 		Name:            "osdPod",
 		Labels:          map[string]string{k8sutil.AppAttr: appName},
-		OwnerReferences: []metav1.OwnerReference{{Name: "rook-ceph-osd-node-node8230-id-1"}}}}
+		OwnerReferences: []metav1.OwnerReference{{Name: "rook-ceph-osd-id-1"}}}}
 	c.context.Clientset.CoreV1().Pods(c.Namespace).Create(osdPod)
 
 	// mock the ceph calls that will be called during remove node
