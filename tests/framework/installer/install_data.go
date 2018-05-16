@@ -17,6 +17,7 @@ limitations under the License.
 package installer
 
 import (
+	"github.com/google/uuid"
 	"strconv"
 )
 
@@ -322,4 +323,32 @@ spec:
         items:
         - key: data
           path: mon-endpoints`
+}
+
+//GetCleanupPod gets a cleanup Pod manifest
+func (i *InstallData) GetCleanupPod(removalDir string) string {
+	return `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rook-cleanup` + uuid.Must(uuid.NewRandom()).String() + `
+spec:
+    template: 
+      spec:
+          restartPolicy: OnFailure
+          containers:
+              - name: rook-cleaner
+                image: rook/rook:master
+                securityContext:
+                    privileged: true
+                volumeMounts:
+                    - name: cleaner
+                      mountPath: /scrub
+                command: 
+                    - "sh"
+                    -  "-c"
+                    -  "/bin/rm -rf /scrub/"
+          volumes:
+              - name: cleaner
+                hostPath:
+                   path:  ` + removalDir
 }

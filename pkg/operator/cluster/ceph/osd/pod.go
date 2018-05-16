@@ -44,27 +44,6 @@ const (
 	locationEnvVarName        = "ROOK_LOCATION"
 )
 
-func (c *Cluster) makeDaemonSet(selection rookalpha.Selection, config rookalpha.Config) *extensions.DaemonSet {
-	podSpec := c.podTemplateSpec(nil, selection, c.resources, config, false /* prepareOnly */, v1.RestartPolicyAlways)
-	return &extensions.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            appName,
-			Namespace:       c.Namespace,
-			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
-			Labels: map[string]string{
-				k8sutil.AppAttr:     appName,
-				k8sutil.ClusterAttr: c.Namespace,
-			},
-		},
-		Spec: extensions.DaemonSetSpec{
-			UpdateStrategy: extensions.DaemonSetUpdateStrategy{
-				Type: extensions.RollingUpdateDaemonSetStrategyType,
-			},
-			Template: podSpec,
-		},
-	}
-}
-
 func (c *Cluster) makeJob(nodeName string, devices []rookalpha.Device,
 	selection rookalpha.Selection, resources v1.ResourceRequirements, config rookalpha.Config) *batch.Job {
 
@@ -139,6 +118,7 @@ func (c *Cluster) makeOSDDeployment(nodeName string, devices []rookalpha.Device,
 			Labels: map[string]string{
 				k8sutil.AppAttr:     appName,
 				k8sutil.ClusterAttr: c.Namespace,
+				osdLabelKey:         fmt.Sprintf("%d", osd.ID),
 			},
 		},
 		Spec: extensions.DeploymentSpec{
@@ -148,6 +128,7 @@ func (c *Cluster) makeOSDDeployment(nodeName string, devices []rookalpha.Device,
 					Labels: map[string]string{
 						k8sutil.AppAttr:     appName,
 						k8sutil.ClusterAttr: c.Namespace,
+						osdLabelKey:         fmt.Sprintf("%d", osd.ID),
 					},
 					Annotations: map[string]string{},
 				},
@@ -187,29 +168,6 @@ func (c *Cluster) makeOSDDeployment(nodeName string, devices []rookalpha.Device,
 					Volumes: volumes,
 				},
 			},
-			Replicas: &replicaCount,
-		},
-	}
-}
-func (c *Cluster) makeReplicaSet(nodeName string, devices []rookalpha.Device,
-	selection rookalpha.Selection, resources v1.ResourceRequirements, config rookalpha.Config) *extensions.ReplicaSet {
-
-	podSpec := c.podTemplateSpec(devices, selection, resources, config, false /* prepareOnly */, v1.RestartPolicyAlways)
-	podSpec.Spec.NodeSelector = map[string]string{apis.LabelHostname: nodeName}
-	replicaCount := int32(1)
-
-	return &extensions.ReplicaSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            fmt.Sprintf(appNameFmt, nodeName),
-			Namespace:       c.Namespace,
-			OwnerReferences: []metav1.OwnerReference{c.ownerRef},
-			Labels: map[string]string{
-				k8sutil.AppAttr:     appName,
-				k8sutil.ClusterAttr: c.Namespace,
-			},
-		},
-		Spec: extensions.ReplicaSetSpec{
-			Template: podSpec,
 			Replicas: &replicaCount,
 		},
 	}

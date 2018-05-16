@@ -358,6 +358,17 @@ func (h *InstallHelper) UninstallRookFromMultipleNS(helmInstalled bool, systemNa
 	h.k8shelper.Clientset.RbacV1beta1().ClusterRoleBindings().Delete("rook-agent", nil)
 	h.k8shelper.Clientset.RbacV1beta1().ClusterRoleBindings().Delete("anon-user-access", nil)
 	logger.Infof("done removing the operator from namespace %s", systemNamespace)
+	// removing data dir if exists
+	if len(h.dataDir) > 0 {
+		err = h.cleanupDir(h.dataDir)
+		logger.Infof("removing %s, err %v", h.dataDir, err)
+	}
+}
+
+func (h *InstallHelper) cleanupDir(dir string) error {
+	resources := h.installData.GetCleanupPod(dir)
+	_, err := h.k8shelper.KubectlWithStdin(resources, createArgs...)
+	return err
 }
 
 func (h *InstallHelper) checkError(err error, message string) {

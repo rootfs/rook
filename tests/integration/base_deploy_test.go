@@ -153,7 +153,6 @@ func (op BaseTestOperations) TearDown() {
 	if op.installer.T().Failed() {
 		op.installer.GatherAllRookLogs(op.namespace, op.installer.T().Name())
 	}
-	os.RemoveAll(op.dataDirHostPath)
 	op.installer.UninstallRook(op.helmInstalled, op.namespace)
-	op.installer.CleanupCluster(op.namespace)
+	os.RemoveAll(op.dataDirHostPath)
 }

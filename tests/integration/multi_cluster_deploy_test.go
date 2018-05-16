@@ -192,8 +192,6 @@ func (o MCTestOperations) TearDown() {
 	}
 
 	o.installer.UninstallRookFromMultipleNS(false, installer.SystemNamespace(o.namespace1), o.namespace1, o.namespace2)
-	o.installer.CleanupCluster(o.namespace1)
-	o.installer.CleanupCluster(o.namespace2)
 }
 
 func (o MCTestOperations) startCluster(namespace, store string, errCh chan error) {
