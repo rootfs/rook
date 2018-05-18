@@ -154,5 +154,7 @@ func (op BaseTestOperations) TearDown() {
 		op.installer.GatherAllRookLogs(op.namespace, op.installer.T().Name())
 	}
 	op.installer.UninstallRook(op.helmInstalled, op.namespace)
-	os.RemoveAll(op.dataDirHostPath)
+	if err := os.RemoveAll(op.dataDirHostPath); err != nil {
+		logger.Warningf("failed to remove %s: %v", op.dataDirHostPath, err)
+	}
 }
