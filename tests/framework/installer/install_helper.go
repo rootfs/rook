@@ -150,10 +150,10 @@ func (h *InstallHelper) CreateK8sRookToolbox(namespace string) (err error) {
 }
 
 func (h *InstallHelper) CreateK8sRookCluster(namespace string, storeType string) (err error) {
-	if err := os.MkdirAll(DefaultDataDirHostPath(), 0777); err != nil {
+	if err := os.MkdirAll(DefaultDataDirHostPath(namespace), 0777); err != nil {
 		return err
 	}
-	h.dataDir, err = ioutil.TempDir(DefaultDataDirHostPath(), "test-")
+	h.dataDir, err = ioutil.TempDir(DefaultDataDirHostPath(namespace), "test-")
 	if err != nil {
 		return err
 	}
@@ -489,8 +489,8 @@ func IsAdditionalDeviceAvailableOnCluster() bool {
 	return false
 }
 
-func DefaultDataDirHostPath() string {
+func DefaultDataDirHostPath(namespace string) string {
 	cwd, _ := os.Getwd()
-	testDir := path.Join(cwd, "rook-test")
+	testDir := path.Join(cwd, namespace, "rook-test")
 	return testDir
 }
