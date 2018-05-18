@@ -115,7 +115,8 @@ func (d *Discover) createDiscoverDaemonSet(namespace, discoverImage string) erro
 								{
 									Name:      "dev",
 									MountPath: "/dev",
-									ReadOnly:  true,
+									// discovery pod could fail to start if /dev is mounted ro
+									ReadOnly: false,
 								},
 								{
 									Name:      "sys",
