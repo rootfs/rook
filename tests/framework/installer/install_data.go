@@ -346,7 +346,7 @@ spec:
                 command: 
                     - "sh"
                     -  "-c"
-                    -  "/bin/rm -rf /scrub/test*"
+                    -  "chmod -R 777 /scrub/*"
           volumes:
               - name: cleaner
                 hostPath:
