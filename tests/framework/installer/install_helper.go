@@ -150,22 +150,25 @@ func (h *InstallHelper) CreateK8sRookToolbox(namespace string) (err error) {
 }
 
 func (h *InstallHelper) CreateK8sRookCluster(namespace string, storeType string) (err error) {
-	if err := os.MkdirAll(DefaultDataDirHostPath(namespace), 0777); err != nil {
-		return err
-	}
-	h.dataDir, err = ioutil.TempDir(DefaultDataDirHostPath(namespace), "test-")
-	if err != nil {
-		return err
-	}
-	return h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, h.dataDir, false, 1, true /* startWithAllNodes */)
+	return h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, false, 1, true /* startWithAllNodes */)
 }
 
 //CreateK8sRookCluster creates rook cluster via kubectl
-func (h *InstallHelper) CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, dataDirHostPath string,
+func (h *InstallHelper) CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType string,
 	useAllDevices bool, mons int, startWithAllNodes bool) error {
 
+	if err := os.MkdirAll(DefaultDataDirHostPath(namespace), 0777); err != nil {
+		return err
+	}
+
+	dataDir, err := ioutil.TempDir(DefaultDataDirHostPath(namespace), "test-")
+	if err != nil {
+		return err
+	}
+	h.dataDir = dataDir
+
 	ns := &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-	_, err := h.k8shelper.Clientset.CoreV1().Namespaces().Create(ns)
+	_, err = h.k8shelper.Clientset.CoreV1().Namespaces().Create(ns)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("failed to create namespace %s. %+v", namespace, err)
 	}
@@ -179,7 +182,7 @@ func (h *InstallHelper) CreateK8sRookClusterWithHostPathAndDevices(namespace, st
 				Namespace: namespace,
 			},
 			Spec: rookalpha.ClusterSpec{
-				DataDirHostPath: dataDirHostPath,
+				DataDirHostPath: h.dataDir,
 				HostNetwork:     false,
 				MonCount:        mons,
 				Storage: rookalpha.StorageSpec{
@@ -229,7 +232,7 @@ func (h *InstallHelper) CreateK8sRookClusterWithHostPathAndDevices(namespace, st
 		}
 	} else {
 		logger.Infof("Starting Rook Cluster with yaml")
-		rookCluster := h.installData.GetRookCluster(namespace, storeType, dataDirHostPath, useAllDevices, mons)
+		rookCluster := h.installData.GetRookCluster(namespace, storeType, h.dataDir, useAllDevices, mons)
 		if _, err := h.k8shelper.KubectlWithStdin(rookCluster, createArgs...); err != nil {
 			return fmt.Errorf("Failed to create rook cluster : %v ", err)
 		}
@@ -290,7 +293,7 @@ func (h *InstallHelper) InstallRookOnK8sWithHostPathAndDevices(namespace, storeT
 	}
 
 	//Create rook cluster
-	err = h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, dataDirHostPath, useDevices, mons, startWithAllNodes)
+	err = h.CreateK8sRookClusterWithHostPathAndDevices(namespace, storeType, useDevices, mons, startWithAllNodes)
 	if err != nil {
 		logger.Errorf("Rook cluster %s not installed, error -> %v", namespace, err)
 		return false, err
@@ -358,6 +361,7 @@ func (h *InstallHelper) UninstallRookFromMultipleNS(helmInstalled bool, systemNa
 	h.k8shelper.Clientset.RbacV1beta1().ClusterRoleBindings().Delete("rook-agent", nil)
 	h.k8shelper.Clientset.RbacV1beta1().ClusterRoleBindings().Delete("anon-user-access", nil)
 	logger.Infof("done removing the operator from namespace %s", systemNamespace)
+	logger.Infof("removing host data dir %s", h.dataDir)
 	// removing data dir if exists
 	if len(h.dataDir) > 0 {
 		err = h.cleanupDir(h.dataDir)

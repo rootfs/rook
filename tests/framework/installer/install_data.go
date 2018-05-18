@@ -330,11 +330,11 @@ func (i *InstallData) GetCleanupPod(removalDir string) string {
 	return `apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rook-cleanup` + uuid.Must(uuid.NewRandom()).String() + `
+  name: rook-cleanup-` + uuid.Must(uuid.NewRandom()).String() + `
 spec:
     template: 
       spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never
           containers:
               - name: rook-cleaner
                 image: rook/rook:master
@@ -346,7 +346,7 @@ spec:
                 command: 
                     - "sh"
                     -  "-c"
-                    -  "/bin/rm -rf /scrub/"
+                    -  "/bin/rm -rf /scrub/test*"
           volumes:
               - name: cleaner
                 hostPath:
