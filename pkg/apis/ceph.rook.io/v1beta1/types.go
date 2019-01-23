@@ -293,3 +293,87 @@ type GatewaySpec struct {
 	// The resource requirements for the rgw pods
 	Resources v1.ResourceRequirements `json:"resources"`
 }
+
+// CephClusterReference represents a Ceph Cluster Reference.
+type RookCephClusterReference struct {
+	// Name is unique within a namespace to reference a Cluster resource.
+	Name string `json:"name"`
+	// Namespace defines the namespace to find the cluster.
+	Namespace string `json:"namespace"`
+}
+
+// CephClusterReference represents a Ceph Cluster Reference.
+// This Ceph cluster may not be managed by Rook.
+type CephClusterReference struct {
+	// Ceph Monitors
+	Monitors string `json:"monintors"`
+	// AdminSecretReference defines the Secret that contains Ceph user and keyrings.
+	AdminSecretRef *v1.SecretReference `json:"adminSecretRef"`
+}
+
+type StorageDriverType string
+
+const (
+	// rbd is the default driver
+	RBDStorageDriver    StorageDriverType = "rbd"
+	CephFSStorageDriver StorageDriverType = "cephfs"
+	// rbd + cephfs
+	AllStorageDrivers StorageDriverType = "all"
+)
+
+// +genclient
+// +genclient:noStatus
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// CSIDriverSpec describes how to setup CSI driver(s) and associated StorageClasses
+type CSIDriver struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata"`
+	Spec              CSIDriverSpec   `json:"spec"`
+	Status            CSIDriverStatus `json:"status,omitempty"`
+}
+
+// CSIDriverSpec describes how to setup CSI driver(s) and associated StorageClasses
+type CSIDriverSpec struct {
+	// RookCephClusterRef refers to a Rook managed Ceph Cluster.
+	// A StorageClass will be created using this cluster.
+	// Default is empty.
+	RookCephClusterRef *RookCephClusterReference `json:"rookCephClusterRef,omitempty"`
+
+	// CephClusterRef refers to a Ceph cluster that may not be managed by Rook.
+	// A StorageClass will be created using this cluster.
+	// Default is empty.
+	// Only one of RookCephClusterRef or CephClusterRef can be set.
+	// If none of the cluster references are set, no storage classes are created.
+	CephClusterRef *CephClusterReference `json:"cephClusterRef,omitempty"`
+
+	// StorageDriver type. Default is rbd
+	StorageDriver StorageDriverType `json:"storageDriver,omitempty"`
+
+	// DriverNamePrefix is a prefix to the driver names. Default is empty.
+	DriverNamePrefix string `json:"driverNamePrefix,omitempty"`
+}
+
+type CSIDriverState string
+
+const (
+	CSIDriverStateControllerReady  CSIDriverState = "ControllerReady"
+	CSIDriverStateControllerFailed CSIDriverState = "ControllerFailed"
+	CSIDriverStateNodeReady        CSIDriverState = "NodeReady"
+	CSIDriverStateNodeFailed       CSIDriverState = "NodeFailed"
+	CSIDriverStateReady            CSIDriverState = "Ready"
+	CSIDriverStateFailed           CSIDriverState = "Failed"
+)
+
+type CSIDriverStatus struct {
+	State   CSIDriverState `json:"state,omitempty"`
+	Message string         `json:"message,omitempty"`
+}
+
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+type CSIDriverList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+	Items           []CSIDriver `json:"items"`
+}
