@@ -28,6 +28,10 @@ type FakeCephV1beta1 struct {
 	*testing.Fake
 }
 
+func (c *FakeCephV1beta1) CSIDrivers(namespace string) v1beta1.CSIDriverInterface {
+	return &FakeCSIDrivers{c, namespace}
+}
+
 func (c *FakeCephV1beta1) Clusters(namespace string) v1beta1.ClusterInterface {
 	return &FakeClusters{c, namespace}
 }

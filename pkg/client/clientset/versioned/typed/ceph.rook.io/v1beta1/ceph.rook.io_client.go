@@ -27,6 +27,7 @@ import (
 
 type CephV1beta1Interface interface {
 	RESTClient() rest.Interface
+	CSIDriversGetter
 	ClustersGetter
 	FilesystemsGetter
 	ObjectStoresGetter
@@ -37,6 +38,10 @@ type CephV1beta1Interface interface {
 // CephV1beta1Client is used to interact with features provided by the ceph.rook.io group.
 type CephV1beta1Client struct {
 	restClient rest.Interface
+}
+
+func (c *CephV1beta1Client) CSIDrivers(namespace string) CSIDriverInterface {
+	return newCSIDrivers(c, namespace)
 }
 
 func (c *CephV1beta1Client) Clusters(namespace string) ClusterInterface {

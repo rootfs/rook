@@ -78,6 +78,8 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ceph().V1().CephObjectStoreUsers().Informer()}, nil
 
 		// Group=ceph.rook.io, Version=v1beta1
+	case v1beta1.SchemeGroupVersion.WithResource("csidrivers"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Ceph().V1beta1().CSIDrivers().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("clusters"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Ceph().V1beta1().Clusters().Informer()}, nil
 	case v1beta1.SchemeGroupVersion.WithResource("filesystems"):

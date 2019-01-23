@@ -24,6 +24,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
+	// CSIDrivers returns a CSIDriverInformer.
+	CSIDrivers() CSIDriverInformer
 	// Clusters returns a ClusterInformer.
 	Clusters() ClusterInformer
 	// Filesystems returns a FilesystemInformer.
@@ -45,6 +47,11 @@ type version struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
+}
+
+// CSIDrivers returns a CSIDriverInformer.
+func (v *version) CSIDrivers() CSIDriverInformer {
+	return &cSIDriverInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Clusters returns a ClusterInformer.

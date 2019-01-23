@@ -18,6 +18,8 @@ limitations under the License.
 
 package v1beta1
 
+type CSIDriverExpansion interface{}
+
 type ClusterExpansion interface{}
 
 type FilesystemExpansion interface{}

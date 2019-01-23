@@ -18,6 +18,14 @@ limitations under the License.
 
 package v1beta1
 
+// CSIDriverListerExpansion allows custom methods to be added to
+// CSIDriverLister.
+type CSIDriverListerExpansion interface{}
+
+// CSIDriverNamespaceListerExpansion allows custom methods to be added to
+// CSIDriverNamespaceLister.
+type CSIDriverNamespaceListerExpansion interface{}
+
 // ClusterListerExpansion allows custom methods to be added to
 // ClusterLister.
 type ClusterListerExpansion interface{}
